@@ -123,9 +123,8 @@ SELECT
   COUNT(*) as total_runners,
   AVG(EXTRACT(EPOCH FROM (NOW() - started_at))) as avg_duration_seconds,
   json_agg(DISTINCT city) FILTER (WHERE city IS NOT NULL) as cities
-FROM runs
-WHERE status = 'active'
-  AND started_at > NOW() - INTERVAL '4 hours';
+FROM active_runners
+WHERE last_heartbeat > NOW() - INTERVAL '5 minutes';
 
 -- ============================================================
 -- Functions & Triggers
