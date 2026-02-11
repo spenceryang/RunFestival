@@ -3,6 +3,7 @@ import { streamCoachingMessage } from '@/lib/coach/coach-client';
 import { requestTTS } from './tts-client';
 import { speakWithBrowserTTS } from './fallback-tts';
 import { PERSONA_VOICE_CONFIG } from '@/lib/coach/prompts';
+import { ttsUsageTracker } from './tts-usage-tracker';
 
 const MAX_QUEUE_SIZE = 2;
 
@@ -18,6 +19,21 @@ export class AudioManager {
   private isMuted = false;
   private currentSource: AudioBufferSourceNode | null = null;
   private interrupted = false;
+  private visibilityHandler: (() => void) | null = null;
+
+  constructor() {
+    // Pause TTS when app goes to background to prevent background API usage
+    if (typeof document !== 'undefined') {
+      this.visibilityHandler = () => {
+        if (document.visibilityState === 'hidden') {
+          ttsUsageTracker.pauseSession();
+        } else {
+          ttsUsageTracker.resumeSession();
+        }
+      };
+      document.addEventListener('visibilitychange', this.visibilityHandler);
+    }
+  }
 
   private getAudioContext(): AudioContext {
     if (!this.audioContext) {
@@ -217,5 +233,10 @@ export class AudioManager {
       this.audioContext.close();
       this.audioContext = null;
     }
+    if (this.visibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      this.visibilityHandler = null;
+    }
+    ttsUsageTracker.pauseSession();
   }
 }

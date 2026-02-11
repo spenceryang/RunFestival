@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { DistanceSelector } from '@/components/setup/DistanceSelector';
@@ -15,8 +15,16 @@ export default function SetupPage() {
   const router = useRouter();
   const startRun = useRunStore((s) => s.startRun);
   const setRunId = useRunStore((s) => s.setRunId);
+  const setDistanceUnit = useRunStore((s) => s.setDistanceUnit);
   const distanceUnit = useRunStore((s) => s.distanceUnit);
   const user = useUserStore((s) => s.user);
+
+  // Sync distance unit from user profile on mount
+  useEffect(() => {
+    if (user?.distanceUnit) {
+      setDistanceUnit(user.distanceUnit);
+    }
+  }, [user?.distanceUnit, setDistanceUnit]);
 
   const [distance, setDistance] = useState<number | null>(5000);
   const [pace, setPace] = useState<number | null>(null);

@@ -10,6 +10,7 @@ import { formatPace, formatTime, formatDistance } from '@/lib/gps/pace';
 import { PaceDisplay } from './PaceDisplay';
 import { RunControls } from './RunControls';
 import { CollectiveBanner } from './CollectiveBanner';
+import { ApiUsagePanel } from '@/components/dev/ApiUsagePanel';
 
 const SPEED_OPTIONS = [5, 10, 20, 50] as const;
 
@@ -310,6 +311,9 @@ export function DevRunScreen({ onFinish, onTalkToCoach, isListening = false }: D
           onTalkToCoach={onTalkToCoach}
         />
       </div>
+
+      {/* API Usage Analytics — dev mode only */}
+      <ApiUsagePanel />
     </div>
   );
 }

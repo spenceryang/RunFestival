@@ -49,6 +49,14 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // Server-side cost guard: reject oversized requests
+  if (body.text.length > 1000) {
+    return new Response(JSON.stringify({ error: 'Text exceeds maximum length (1000 chars)' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${body.voiceId}/stream`,

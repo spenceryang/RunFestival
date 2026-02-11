@@ -53,10 +53,12 @@ export async function createRunRecord(params: CreateRunParams): Promise<string |
 
 /**
  * Updates a run record with final data when the run is completed.
+ * Also generates route_geojson from GPS points for easy visualization.
  */
 export async function completeRunRecord(params: CompleteRunParams): Promise<boolean> {
   try {
     const supabase = createClient();
+    const routeGeojson = buildRouteGeoJson(params.gpsPoints);
     const { error } = await supabase
       .from('runs')
       .update({
@@ -67,6 +69,7 @@ export async function completeRunRecord(params: CompleteRunParams): Promise<bool
         average_pace_seconds_per_km: params.averagePaceSecondsPerKm,
         splits: params.splits,
         gps_points: params.gpsPoints,
+        route_geojson: routeGeojson,
         coaching_messages: params.coachingMessages,
         ai_summary: params.aiSummary ?? null,
         collective_count: params.collectiveCount ?? null,
@@ -97,4 +100,23 @@ export async function updateRunAiSummary(runId: string, aiSummary: string): Prom
   } catch {
     console.warn('Failed to update AI summary — non-critical');
   }
+}
+
+/**
+ * Builds a GeoJSON LineString from GPS points.
+ * Uses [lng, lat] coordinate order per GeoJSON spec.
+ */
+function buildRouteGeoJson(gpsPoints: GpsPoint[]): object | null {
+  if (gpsPoints.length < 2) return null;
+
+  return {
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: gpsPoints.map((p) => [p.lng, p.lat, p.altitude ?? 0]),
+    },
+    properties: {
+      pointCount: gpsPoints.length,
+    },
+  };
 }
