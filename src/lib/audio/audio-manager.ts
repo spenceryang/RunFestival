@@ -37,15 +37,29 @@ export class AudioManager {
     }
   }
 
-  private getAudioContext(): AudioContext {
+  private async getAudioContext(): Promise<AudioContext> {
     if (!this.audioContext) {
       this.audioContext = new AudioContext();
     }
-    // Resume if suspended (e.g., after user gesture requirement)
+    // Resume if suspended — must await on mobile where gesture is required
     if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
+      await this.audioContext.resume();
     }
     return this.audioContext;
+  }
+
+  /**
+   * Warm up the AudioContext from a user gesture (tap/click).
+   * On iOS/Android, AudioContext must be created or resumed during a
+   * user gesture — timer callbacks won't work. Call this from the
+   * setup page "Go" button or any run-screen user interaction.
+   */
+  async warmUp(): Promise<void> {
+    try {
+      await this.getAudioContext();
+    } catch {
+      // Silently fail — we'll retry on next user gesture
+    }
   }
 
   /**
@@ -182,6 +196,12 @@ export class AudioManager {
     // Process next in queue (unless interrupted)
     if (!this.interrupted) {
       await this.processNext();
+    } else {
+      // Interrupted during processing — ensure indicator is cleared.
+      // interrupt() normally handles this, but in race conditions the
+      // catch block above may swallow the state change.
+      this.isPlaying = false;
+      this.notifyActiveChange(false);
     }
   }
 
@@ -261,7 +281,7 @@ export class AudioManager {
   }
 
   private async playAudioBuffer(buffer: ArrayBuffer): Promise<void> {
-    const ctx = this.getAudioContext();
+    const ctx = await this.getAudioContext();
     const audioBuffer = await ctx.decodeAudioData(buffer);
 
     return new Promise<void>((resolve) => {

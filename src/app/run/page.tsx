@@ -161,6 +161,13 @@ function RunPage() {
     audioManagerRef.current.onActiveChange(setIsCoaching);
     voiceInputRef.current = new VoiceInput();
 
+    // Warm up AudioContext on first user gesture (required on iOS/Android).
+    // AudioContext must be created/resumed during a tap — timer callbacks won't work.
+    const warmUpOnGesture = () => {
+      audioManagerRef.current?.warmUp();
+    };
+    document.addEventListener('pointerdown', warmUpOnGesture, { once: true });
+
     // Evaluate triggers every 3 seconds
     triggerIntervalRef.current = setInterval(() => {
       const currentState = useRunStore.getState();
@@ -223,6 +230,7 @@ function RunPage() {
     }, 3000);
 
     return () => {
+      document.removeEventListener('pointerdown', warmUpOnGesture);
       if (triggerIntervalRef.current) clearInterval(triggerIntervalRef.current);
       triggerEngineRef.current?.reset();
       audioManagerRef.current?.destroy();
@@ -297,6 +305,9 @@ function RunPage() {
   }, [getCoachingHistory, buildOnComplete, getUserProfileForCoaching]);
 
   const handleTalkToCoach = useCallback(() => {
+    // Warm up AudioContext on user gesture — ensures it's ready for playback
+    audioManagerRef.current?.warmUp();
+
     // If already listening, stop and fall back to regular coach trigger
     if (voiceInputRef.current?.isListening) {
       voiceInputRef.current.stop();
