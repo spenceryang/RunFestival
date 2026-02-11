@@ -19,6 +19,7 @@ export class AudioManager {
   private isMuted = false;
   private currentSource: AudioBufferSourceNode | null = null;
   private interrupted = false;
+  private isPaused = false;
   private visibilityHandler: (() => void) | null = null;
 
   constructor() {
@@ -72,11 +73,53 @@ export class AudioManager {
     this.isPlaying = false;
   }
 
+  /**
+   * Pause audio processing. Stops current playback but preserves
+   * the AudioContext and queue. Use when the run is paused.
+   */
+  pause(): void {
+    this.isPaused = true;
+
+    // Stop current Web Audio playback
+    if (this.currentSource) {
+      try {
+        this.currentSource.stop();
+      } catch {
+        // Already stopped
+      }
+      this.currentSource = null;
+    }
+
+    // Cancel any browser TTS in progress
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      speechSynthesis.cancel();
+    }
+
+    this.isPlaying = false;
+  }
+
+  /**
+   * Resume audio processing after a pause. AudioContext is preserved,
+   * so the same voice continues. Picks up queue processing if messages
+   * are pending.
+   */
+  resume(): void {
+    this.isPaused = false;
+    // If there are queued messages, start processing them
+    if (this.queue.length > 0 && !this.isPlaying) {
+      this.processNext();
+    }
+  }
+
+  get paused(): boolean {
+    return this.isPaused;
+  }
+
   async enqueue(
     context: CoachingContext,
     onMessageComplete?: (fullText: string) => void
   ): Promise<void> {
-    if (this.isMuted) return;
+    if (this.isMuted || this.isPaused) return;
 
     // Reset interrupted flag on new enqueue
     this.interrupted = false;
@@ -92,7 +135,7 @@ export class AudioManager {
   }
 
   private async processNext(): Promise<void> {
-    if (this.interrupted) return;
+    if (this.interrupted || this.isPaused) return;
 
     const next = this.queue.shift();
     if (!next) {
@@ -148,7 +191,7 @@ export class AudioManager {
         if (isProcessing) return;
         isProcessing = true;
 
-        while (sentenceIndex < sentences.length && !this.interrupted) {
+        while (sentenceIndex < sentences.length && !this.interrupted && !this.isPaused) {
           const sentence = sentences[sentenceIndex];
           sentenceIndex++;
           await playSentence(sentence);

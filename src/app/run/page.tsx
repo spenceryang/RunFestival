@@ -126,15 +126,34 @@ function RunPage() {
     [getUserProfileForCoaching, userProfile]
   );
 
-  // Initialize coaching systems
+  // Keep callback refs up to date to avoid stale closures in the trigger interval
+  const getCoachingHistoryRef = useRef(getCoachingHistory);
+  useEffect(() => { getCoachingHistoryRef.current = getCoachingHistory; }, [getCoachingHistory]);
+
+  const buildOnCompleteRef = useRef(buildOnComplete);
+  useEffect(() => { buildOnCompleteRef.current = buildOnComplete; }, [buildOnComplete]);
+
+  const getUserProfileForCoachingRef = useRef(getUserProfileForCoaching);
+  useEffect(() => { getUserProfileForCoachingRef.current = getUserProfileForCoaching; }, [getUserProfileForCoaching]);
+
+  // Effect 1: Redirect if user lands on /run without an active run
   useEffect(() => {
-    if (store.status !== 'running' && store.status !== 'paused') {
-      // If we land on /run without starting, redirect to setup
-      if (store.status === 'idle') {
-        router.replace('/setup');
-        return;
-      }
+    if (store.status === 'idle') {
+      router.replace('/setup');
     }
+  }, [store.status, router]);
+
+  // Effect 2: Initialize coaching systems once — clean up on unmount only
+  const coachingInitializedRef = useRef(false);
+
+  useEffect(() => {
+    // Only initialize once per mount
+    if (coachingInitializedRef.current) return;
+
+    const status = useRunStore.getState().status;
+    if (status !== 'running' && status !== 'paused') return;
+
+    coachingInitializedRef.current = true;
 
     triggerEngineRef.current = new CoachingTriggerEngine();
     audioManagerRef.current = new AudioManager();
@@ -191,13 +210,13 @@ function RunPage() {
             splits: currentState.splits,
             isPaused: false,
           },
-          getUserProfileForCoaching(),
+          getUserProfileForCoachingRef.current(),
           collectiveState,
-          getCoachingHistory(),
+          getCoachingHistoryRef.current(),
           coachingState.cachedStoryPlan,
           qualityFeedback
         );
-        audioManagerRef.current?.enqueue(context, buildOnComplete(trigger.type));
+        audioManagerRef.current?.enqueue(context, buildOnCompleteRef.current(trigger.type));
       }
     }, 3000);
 
@@ -207,8 +226,19 @@ function RunPage() {
       audioManagerRef.current?.destroy();
       voiceInputRef.current?.destroy();
       useCoachingStore.getState().reset();
+      coachingInitializedRef.current = false;
     };
-  }, [store.status, router, getCoachingHistory, buildOnComplete, getUserProfileForCoaching]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Effect 3: Pause/resume audio when run status changes
+  useEffect(() => {
+    if (store.status === 'paused') {
+      audioManagerRef.current?.pause();
+    } else if (store.status === 'running') {
+      audioManagerRef.current?.resume();
+    }
+  }, [store.status]);
 
   const handleFinish = useCallback(() => {
     router.push('/recap');
