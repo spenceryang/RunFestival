@@ -34,8 +34,9 @@ Think Peloton energy, but for the open road.
 - **Dev mode analytics panel** — Real-time cost tracking (characters, requests, estimated $)
 
 ### User Accounts & Run Persistence
-- Magic link authentication (Supabase Auth)
+- Magic link authentication — unified login/signup flow (Supabase Auth)
 - Profile setup: name, city, experience level, persona, story topics, activity types
+- Sign-out from home page dropdown or profile page
 - All runs saved to PostgreSQL with splits, GPS route (GeoJSON), coaching messages, AI recap
 - Offline sync: failed run completions queued in IndexedDB, synced on next login
 
@@ -53,7 +54,14 @@ Think Peloton energy, but for the open road.
 - Race Director agent detects cross-runner patterns
 - Milestone feed from other runners worldwide
 
+### Run Experience UX
+- **Coaching activity indicator** — pulsing dot shows when coach is thinking/speaking
+- **Stop confirmation** — "Are you sure?" dialog prevents accidental run end
+- **Paused state banner** — clear visual when run is paused with resume/stop options
+- **Inclusive pace selector** — range up to 10:00/km with encouraging labels, "No target" option
+
 ### Post-Run Recap
+- **Celebration-first design** — distance achievement hero with confetti animation before stats
 - AI-generated narrative analyzing your pace, splits, and patterns
 - Mapbox pace heatmap (green = fast, orange = on pace, red = slow)
 - Split table with target pace comparison
@@ -117,6 +125,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | `ANTHROPIC_API_KEY` | Claude API key for AI coaching | Yes |
 | `ELEVENLABS_API_KEY` | ElevenLabs API key for voice | Yes |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | Mapbox public token for maps | Yes |
+| `NEXT_PUBLIC_SITE_URL` | Production URL for auth redirects (e.g. `https://runfestival.vercel.app`) | Yes (prod) |
 | `OPENWEATHER_API_KEY` | OpenWeather API key | Optional |
 
 ### Scripts
@@ -125,7 +134,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 npm run dev          # Development server
 npm run build        # Production build
 npm run start        # Production server
-npm run test         # Run all tests (213 tests)
+npm run test         # Run all tests (238 tests)
 npm run test:watch   # Watch mode
 ```
 
@@ -164,6 +173,7 @@ src/
     collective/      # Presence (city-sharded), synthetic runners
   types/             # TypeScript interfaces
 supabase/
+  migrations/        # Database schema (PostgreSQL DDL)
   functions/
     race-director/   # Global: cross-runner pattern detection
     story-library/   # Global: daily story seed generation
@@ -184,6 +194,19 @@ supabase/
 6. **Recap** — AI narrative, pace heatmap, splits — all persisted to your profile
 7. **Offline** — If Supabase is unreachable, run data is queued and synced on next login
 
+### Database Setup
+
+The Supabase schema is in `supabase/migrations/20250210_initial_schema.sql`. To set up:
+
+1. Go to your Supabase Dashboard → SQL Editor
+2. Paste the contents of the migration file and run it
+3. This creates all tables (users, runs, active_runners, collective_events, story_seeds), indexes, views, triggers, RLS policies, and Realtime subscriptions
+
+Or use the Supabase CLI:
+```bash
+npx supabase db push
+```
+
 ## Documentation
 
 - [PRD.md](PRD.md) — Product requirements
@@ -192,6 +215,7 @@ supabase/
 - [AGENTS.md](docs/AGENTS.md) — Multi-agent architecture details
 - [SCALE.md](docs/SCALE.md) — Scaling plan for 10K/100K users with cost projections
 - [HARDCODED.md](HARDCODED.md) — Audit of hardcoded values and migration checklist
+- [FEATURE_REQUESTS.md](FEATURE_REQUESTS.md) — Planned features: HR zone coaching, treadmill mode, Capacitor native app
 
 ## License
 
