@@ -6,6 +6,7 @@ import { useRunStore } from '@/lib/store/run-store';
 import { useCollectiveStore } from '@/lib/store/collective-store';
 import { RunScreen } from '@/components/run/RunScreen';
 import { DemoRunScreen } from '@/components/run/DemoRunScreen';
+import { DevRunScreen } from '@/components/run/DevRunScreen';
 import { CoachingTriggerEngine } from '@/lib/coach/trigger-engine';
 import { buildCoachingContext } from '@/lib/coach/context-builder';
 import { AudioManager } from '@/lib/audio/audio-manager';
@@ -23,6 +24,7 @@ function RunPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isDemo = searchParams.get('demo') === 'true';
+  const isDev = searchParams.get('dev') === 'true';
   const store = useRunStore();
   const triggerEngineRef = useRef<CoachingTriggerEngine | null>(null);
   const audioManagerRef = useRef<AudioManager | null>(null);
@@ -195,6 +197,22 @@ function RunPage() {
     // Fallback: trigger coach without voice message
     sendToCoach();
   }, [sendToCoach]);
+
+  if (isDev) {
+    // Verify dev auth from sessionStorage
+    const isDevAuthed = typeof window !== 'undefined' && sessionStorage.getItem('dev-auth') === 'true';
+    if (!isDevAuthed) {
+      router.replace('/dev');
+      return <div className="min-h-screen bg-festival-darker" />;
+    }
+    return (
+      <DevRunScreen
+        onFinish={handleFinish}
+        onTalkToCoach={handleTalkToCoach}
+        isListening={isListening}
+      />
+    );
+  }
 
   if (isDemo) {
     return (

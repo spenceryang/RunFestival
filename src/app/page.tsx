@@ -83,10 +83,16 @@ export default function HomePage() {
       </div>
 
       {/* Footer */}
-      <div className="px-6 pb-8 text-center">
+      <div className="px-6 pb-8 text-center space-y-2">
         <p className="text-xs text-festival-muted">
           AI-powered coaching with real-time community presence
         </p>
+        <button
+          onClick={() => router.push('/dev')}
+          className="text-[10px] text-festival-muted/40 hover:text-festival-muted transition-colors"
+        >
+          Dev Mode
+        </button>
       </div>
     </div>
   );
