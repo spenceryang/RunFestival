@@ -60,15 +60,26 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Demo mode */}
-        <button
-          onClick={handleDemo}
-          className="mt-6 flex items-center gap-2 text-sm text-festival-muted
-                     hover:text-festival-orange transition-colors"
-        >
-          <Monitor className="w-4 h-4" />
-          Demo Mode (simulated run at 10x)
-        </button>
+        {/* Secondary actions */}
+        <div className="mt-8 flex flex-col items-center gap-3">
+          <button
+            onClick={() => router.push('/community')}
+            className="flex items-center gap-2 text-sm text-festival-text
+                       hover:text-festival-orange transition-colors"
+          >
+            <Users className="w-4 h-4" />
+            Community Timeline
+          </button>
+
+          <button
+            onClick={handleDemo}
+            className="flex items-center gap-2 text-sm text-festival-muted
+                       hover:text-festival-orange transition-colors"
+          >
+            <Monitor className="w-4 h-4" />
+            Demo Mode (simulated run at 10x)
+          </button>
+        </div>
       </div>
 
       {/* Footer */}
