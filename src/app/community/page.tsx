@@ -32,7 +32,7 @@ export default function CommunityPage() {
           <Users className="w-5 h-5 text-festival-orange" />
           <span className="text-festival-text">
             <span className="text-white font-bold text-lg tabular-nums">
-              {(runnerCount || 342).toLocaleString()}
+              {runnerCount.toLocaleString()}
             </span>{' '}
             active runners
           </span>
