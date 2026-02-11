@@ -27,20 +27,27 @@ Think Peloton energy, but for the open road.
 - Sentence-level streaming for <5s latency (Claude API to ElevenLabs TTS to Web Audio)
 - Mid-run voice input via Web Speech API
 
+### Cost Guards & Monitoring
+- **TTS Usage Tracker** — Session character limits, rate limiting, per-request size caps
+- **Background detection** — Pauses ElevenLabs API calls when app is backgrounded
+- **Server-side guards** — Text length validation on the TTS API route
+- **Dev mode analytics panel** — Real-time cost tracking (characters, requests, estimated $)
+
 ### User Accounts & Run Persistence
 - Magic link authentication (Supabase Auth)
 - Profile setup: name, city, experience level, persona, story topics, activity types
-- All runs saved to PostgreSQL with splits, GPS, coaching messages, AI recap
+- All runs saved to PostgreSQL with splits, GPS route (GeoJSON), coaching messages, AI recap
 - Offline sync: failed run completions queued in IndexedDB, synced on next login
 
 ### GPS Run Tracking
 - Real-time pace, distance, and elapsed time
 - 30-second rolling window pace smoothing (no GPS jitter)
 - Auto-splits every 1km with pace comparison
+- Route persistence as GeoJSON LineString for coach review
 - Offline-capable with IndexedDB backup
 - Wake Lock keeps your screen on
 
-### Community Presence (Scalable to 10K)
+### Community Presence (Scalable to 10K+)
 - City-sharded Supabase Realtime channels (`runners:sf`, `runners:nyc`)
 - Global stats aggregation via Edge Function
 - Race Director agent detects cross-runner patterns
@@ -55,6 +62,7 @@ Think Peloton energy, but for the open road.
 ### Dev / Demo Mode
 - Demo mode: simulated 5K at 10x speed (works without login)
 - Dev mode: password-protected SF Marathon 2026 route simulation with adjustable speed
+- API usage analytics panel (ElevenLabs characters, cost, request rate)
 
 ## Coaching Personas
 
@@ -71,10 +79,10 @@ Think Peloton energy, but for the open road.
 |-------|-----------|
 | Framework | Next.js 14 (App Router, TypeScript, PWA) |
 | Styling | Tailwind CSS |
-| State | Zustand |
-| Backend | Supabase (Auth, PostgreSQL, Realtime) |
+| State | Zustand (5 stores: run, coaching, collective, timeline, user) |
+| Backend | Supabase (Auth, PostgreSQL, Realtime, Edge Functions) |
 | AI | Claude API (Opus 4.6, streaming) |
-| TTS | ElevenLabs (Turbo v2.5, streaming) |
+| TTS | ElevenLabs (Turbo v2.5, streaming) with cost guards |
 | Voice Input | Web Speech API |
 | Maps | Mapbox GL JS |
 | Deploy | Vercel (Edge Functions) |
@@ -117,7 +125,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 npm run dev          # Development server
 npm run build        # Production build
 npm run start        # Production server
-npm run test         # Run all tests (197 tests)
+npm run test         # Run all tests (213 tests)
 npm run test:watch   # Watch mode
 ```
 
@@ -127,24 +135,30 @@ npm run test:watch   # Watch mode
 src/
   app/
     api/coach/       # Claude streaming proxy (Edge Runtime)
-    api/tts/         # ElevenLabs streaming proxy (Edge Runtime)
+    api/tts/         # ElevenLabs streaming proxy with cost guard (Edge Runtime)
     api/recap/       # AI run recap generation (Edge Runtime)
+    api/story-plan/  # Story Curator async planning (Edge Runtime)
+    api/quality/     # Quality Supervisor review (Edge Runtime)
+    auth/            # Login (magic link) + callback
     run/             # Run screen (GPS + coaching)
     setup/           # Pre-run config (distance, pace, persona)
     recap/           # Post-run summary + map
+    profile/         # User profile setup
     dev/             # Dev mode gate
     community/       # Community timeline
   components/
     run/             # RunScreen, DemoRunScreen, DevRunScreen
     recap/           # RecapMap, RecapNarrative, stats
+    dev/             # ApiUsagePanel (cost analytics)
+    providers/       # AuthProvider
     shared/          # CommunityTimeline
   lib/
     gps/             # Tracker, distance/pace math, demo routes
     coach/           # Trigger engine, context builder, prompts
-    audio/           # TTS client, audio manager, voice input
+    audio/           # TTS client, audio manager, voice input, usage tracker
     agents/          # Specialist agents (pace, motivation, story, quality)
     store/           # Zustand stores (run, coaching, collective, timeline, user)
-    services/        # Run persistence, offline sync
+    services/        # Run persistence (with GeoJSON), offline sync
     auth/            # Demo mode headers
     supabase/        # Client, server, edge instances
     collective/      # Presence (city-sharded), synthetic runners
@@ -162,9 +176,10 @@ supabase/
 2. **Profile** — Set your name, persona preference, story topics, activity types
 3. **Setup** — Choose distance, target pace, and coaching persona (pre-filled from profile)
 4. **Run** — GPS tracking starts; 5 agents work together:
-   - Trigger engine evaluates every 3s → Pace Strategist and Motivation Engine enrich context → Head Coach (Opus 4.6) generates response → TTS → Audio playback
+   - Trigger engine evaluates every 3s -> Pace Strategist and Motivation Engine enrich context -> Head Coach (Opus 4.6) generates response -> TTS -> Audio playback
    - Story Curator pre-generates story plans (async) for idle triggers
    - Quality Supervisor reviews every 3rd message (async) and feeds improvements back
+   - TTS Usage Tracker monitors ElevenLabs consumption with cost guards
 5. **Community** — City-sharded presence channels; Race Director generates cross-runner moments
 6. **Recap** — AI narrative, pace heatmap, splits — all persisted to your profile
 7. **Offline** — If Supabase is unreachable, run data is queued and synced on next login
@@ -175,6 +190,8 @@ supabase/
 - [ARCHITECTURE.md](ARCHITECTURE.md) — System architecture and data flows
 - [PROMPTS.md](PROMPTS.md) — Coaching persona system prompts
 - [AGENTS.md](docs/AGENTS.md) — Multi-agent architecture details
+- [SCALE.md](docs/SCALE.md) — Scaling plan for 10K/100K users with cost projections
+- [HARDCODED.md](HARDCODED.md) — Audit of hardcoded values and migration checklist
 
 ## License
 

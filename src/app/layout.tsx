@@ -6,6 +6,10 @@ export const metadata: Metadata = {
   title: 'RunFestival',
   description: 'You run alone. You never run alone. AI-powered social running.',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/favicon.png',
+    apple: '/apple-touch-icon.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
