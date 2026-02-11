@@ -219,6 +219,8 @@ CREATE POLICY "Anyone can view collective events" ON collective_events
 CREATE POLICY "Service role can insert events" ON collective_events
   FOR INSERT WITH CHECK (true);
 
--- Story seeds: readable by all
+-- Story seeds: readable by all, writable by service role
 CREATE POLICY "Anyone can read story seeds" ON story_seeds
   FOR SELECT USING (true);
+CREATE POLICY "Service role can insert story seeds" ON story_seeds
+  FOR INSERT WITH CHECK (true);
