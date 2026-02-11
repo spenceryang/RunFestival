@@ -9,6 +9,7 @@ import { PersonaSelector } from '@/components/setup/PersonaSelector';
 import { useRunStore } from '@/lib/store/run-store';
 import { useUserStore } from '@/lib/store/user-store';
 import { createRunRecord } from '@/lib/services/run-persistence';
+import { getGuestName, setGuestName } from '@/lib/guest-name';
 import type { CoachingPersona } from '@/types/run';
 
 export default function SetupPage() {
@@ -31,8 +32,22 @@ export default function SetupPage() {
   const [persona, setPersona] = useState<CoachingPersona>(
     user?.preferredPersona ?? 'hype'
   );
+  const [guestName, setGuestNameLocal] = useState('');
+  const [showGuestInput, setShowGuestInput] = useState(false);
+
+  // Show guest name input for unauthenticated users who haven't set a name
+  useEffect(() => {
+    if (!user && !getGuestName()) {
+      setShowGuestInput(true);
+    }
+  }, [user]);
 
   const handleGo = async () => {
+    // Save guest name if provided
+    if (!user && guestName.trim()) {
+      setGuestName(guestName.trim());
+    }
+
     startRun({
       targetDistanceMeters: distance,
       targetPaceSecondsPerKm: pace,
@@ -55,7 +70,7 @@ export default function SetupPage() {
     router.push('/run');
   };
 
-  const firstName = user?.name?.split(' ')[0] ?? 'Runner';
+  const firstName = user?.name?.split(' ')[0] ?? getGuestName() ?? 'Runner';
 
   return (
     <div className="min-h-screen bg-festival-darker px-6 py-8">
@@ -103,6 +118,25 @@ export default function SetupPage() {
           <PersonaSelector selected={persona} onChange={setPersona} />
         </div>
       </div>
+
+      {/* Guest name — for unauthenticated users */}
+      {showGuestInput && (
+        <div className="mt-8">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs text-festival-muted uppercase tracking-wider">What should we call you?</span>
+          </div>
+          <input
+            type="text"
+            value={guestName}
+            onChange={(e) => setGuestNameLocal(e.target.value)}
+            placeholder="Your name"
+            maxLength={30}
+            className="w-full px-4 py-3 rounded-xl bg-festival-card border border-festival-border
+                       text-white placeholder-festival-muted/50 text-sm
+                       focus:outline-none focus:border-festival-orange transition-colors"
+          />
+        </div>
+      )}
 
       {/* Start button */}
       <div className="mt-12 flex justify-center">

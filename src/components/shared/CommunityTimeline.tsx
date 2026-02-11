@@ -8,6 +8,7 @@ import { formatPace, formatDistance, formatTime } from '@/lib/gps/pace';
 import { GuestNamePrompt } from '@/components/shared/GuestNamePrompt';
 import { useUserStore } from '@/lib/store/user-store';
 import { getGuestName } from '@/lib/guest-name';
+import { useCallback } from 'react';
 
 const PERSONA_ICONS = {
   hype: Flame,
@@ -78,7 +79,7 @@ interface CommunityTimelineProps {
 }
 
 export function CommunityTimeline({ className = '' }: CommunityTimelineProps) {
-  const { runs, isLoading, setRuns, setLoading } = useTimelineStore();
+  const { runs, isLoading, setRuns, setLoading, updateRunDisplayName } = useTimelineStore();
   const isAuthenticated = useUserStore((s) => s.isAuthenticated);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
 
@@ -88,6 +89,20 @@ export function CommunityTimeline({ className = '' }: CommunityTimelineProps) {
       setShowGuestPrompt(true);
     }
   }, [isAuthenticated]);
+
+  // When guest sets their name, retroactively update any local "Runner" entries
+  const handleGuestNameSet = useCallback(() => {
+    setShowGuestPrompt(false);
+    const newName = getGuestName();
+    if (newName) {
+      // Update local runs that were added with the default "Runner" name
+      for (const run of runs) {
+        if (run.displayName === 'Runner' && run.userId === 'guest') {
+          updateRunDisplayName(run.id, newName);
+        }
+      }
+    }
+  }, [runs, updateRunDisplayName]);
 
   // Fetch real completed runs from API on mount
   useEffect(() => {
@@ -148,7 +163,7 @@ export function CommunityTimeline({ className = '' }: CommunityTimelineProps) {
   return (
     <div className={className}>
       {showGuestPrompt && (
-        <GuestNamePrompt onDone={() => setShowGuestPrompt(false)} />
+        <GuestNamePrompt onDone={handleGuestNameSet} />
       )}
 
       <h2 className="stat-label mb-4 flex items-center gap-2">

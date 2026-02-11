@@ -6,7 +6,9 @@ import { useRunStore } from '@/lib/store/run-store';
 import { useCollectiveStore } from '@/lib/store/collective-store';
 import { useTimelineStore } from '@/lib/store/timeline-store';
 import { useUserStore } from '@/lib/store/user-store';
-import { updateRunAiSummary } from '@/lib/services/run-persistence';
+import { updateRunAiSummary, createRunRecord, completeRunRecord } from '@/lib/services/run-persistence';
+import { useCoachingStore } from '@/lib/store/coaching-store';
+import { queueRunForSync } from '@/lib/services/offline-sync';
 import { getGuestName } from '@/lib/guest-name';
 import { RecapStats } from '@/components/recap/RecapStats';
 import { SplitsTable } from '@/components/recap/SplitsTable';
@@ -22,6 +24,7 @@ export default function RecapPage() {
   const addTimelineRun = useTimelineStore((s) => s.addRun);
   const user = useUserStore((s) => s.user);
   const addedToTimeline = useRef(false);
+  const persistedRef = useRef(false);
 
   // Add the completed run to the community timeline store
   useEffect(() => {
@@ -43,6 +46,46 @@ export default function RecapPage() {
     });
     addedToTimeline.current = true;
   }, [store.distanceMeters, store.elapsedSeconds, store.averagePaceSecondsPerKm, store.persona, store.runId, user, addTimelineRun]);
+
+  // Fallback: persist run for authenticated users who lost their runId
+  // (e.g., createRunRecord failed during setup, or demo→recap flow)
+  useEffect(() => {
+    if (persistedRef.current) return;
+    if (!user || store.runId) return; // Already has a runId or not authenticated
+    if (store.distanceMeters <= 0 || store.elapsedSeconds <= 0) return;
+    persistedRef.current = true;
+
+    (async () => {
+      const runId = await createRunRecord({
+        userId: user.id,
+        targetDistanceMeters: store.targetDistanceMeters,
+        targetPaceSecondsPerKm: store.targetPaceSecondsPerKm,
+        persona: store.persona,
+      });
+      if (!runId) return;
+
+      store.setRunId(runId);
+      const runData = {
+        runId,
+        distanceMeters: store.distanceMeters,
+        elapsedSeconds: store.elapsedSeconds,
+        averagePaceSecondsPerKm: store.averagePaceSecondsPerKm,
+        splits: store.splits,
+        gpsPoints: store.gpsPoints,
+        coachingMessages: useCoachingStore.getState().history.map((h) => ({
+          triggerType: h.triggerType,
+          text: h.text,
+          timestamp: h.timestamp,
+        })),
+        collectiveCount: useCollectiveStore.getState().runnerCount,
+      };
+      const success = await completeRunRecord(runData);
+      if (!success) {
+        await queueRunForSync(runData);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, store.runId]);
 
   const handleDone = () => {
     store.resetRun();

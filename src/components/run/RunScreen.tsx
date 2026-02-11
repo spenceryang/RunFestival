@@ -12,8 +12,11 @@ import { CollectiveBanner } from './CollectiveBanner';
 import { CoachingIndicator } from './CoachingIndicator';
 import { useCollectiveStore } from '@/lib/store/collective-store';
 import { useCoachingStore } from '@/lib/store/coaching-store';
+import { useUserStore } from '@/lib/store/user-store';
 import { completeRunRecord } from '@/lib/services/run-persistence';
 import { queueRunForSync } from '@/lib/services/offline-sync';
+import { joinPresence, leavePresence, startHeartbeat } from '@/lib/collective/presence';
+import { getGuestName } from '@/lib/guest-name';
 
 interface RunScreenProps {
   onFinish: () => void;
@@ -24,9 +27,35 @@ interface RunScreenProps {
 
 export function RunScreen({ onFinish, onTalkToCoach, isListening = false, isCoaching = false }: RunScreenProps) {
   const store = useRunStore();
+  const user = useUserStore((s) => s.user);
   const trackerRef = useRef<GpsTracker | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const saveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const presenceJoinedRef = useRef(false);
+
+  // Join presence channels on mount
+  useEffect(() => {
+    if (presenceJoinedRef.current) return;
+    presenceJoinedRef.current = true;
+
+    const displayName = user?.name ?? getGuestName() ?? 'Runner';
+    const city = user?.city ?? 'Unknown';
+    joinPresence({
+      userId: user?.id ?? `guest-${Date.now()}`,
+      displayName,
+      city,
+    });
+    startHeartbeat(() => ({
+      distanceMeters: useRunStore.getState().distanceMeters,
+      currentPaceSecondsPerKm: useRunStore.getState().currentPaceSecondsPerKm,
+    }));
+
+    return () => {
+      leavePresence();
+      presenceJoinedRef.current = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Start GPS tracking and timer
   useEffect(() => {

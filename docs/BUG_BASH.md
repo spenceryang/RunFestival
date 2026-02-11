@@ -68,6 +68,57 @@ Tracking document for known bugs, fixes in progress, and verification status.
 
 ---
 
+### BUG-004: Active runners count not showing on community page
+- **Severity:** Medium
+- **Status:** Fixed
+- **Reported:** 2026-02-11
+- **Description:** When a runner is actively running, the community page shows "0 active runners" instead of at least 1. The `CollectiveBanner` during the run also doesn't show a runner count for real (non-demo) runs.
+- **Root Cause:** `RunScreen.tsx` never called `joinPresence()` to subscribe to Supabase Realtime presence channels. Only `DemoRunScreen` set a synthetic runner count. Without joining the presence channel, the collective store's `runnerCount` stayed at 0 for real runs.
+- **Files Affected:**
+  - `src/components/run/RunScreen.tsx` — no presence subscription
+  - `src/lib/collective/presence.ts` — `joinPresence()` existed but was never called from RunScreen
+  - `src/lib/store/collective-store.ts` — `runnerCount` defaulted to 0
+- **Fix:** Added `joinPresence()`, `startHeartbeat()`, and `leavePresence()` lifecycle to `RunScreen.tsx` on mount, with user/guest name and city. The presence channel's `sync` event updates `runnerCount` in the collective store.
+- **Verification:** Start a real run, check that `CollectiveBanner` shows runner count. Open `/community` on another tab — should show active runners.
+
+---
+
+### BUG-005: Completed run not appearing on other devices
+- **Severity:** High
+- **Status:** Fixed
+- **Reported:** 2026-02-11
+- **Description:** After completing a run, the run does not appear on the community feed when viewed from another device. The run only exists in the local timeline store on the device that ran it.
+- **Root Cause:** For authenticated users, `createRunRecord()` in the setup page could fail silently (network error, offline), leaving `runId` as null. Without a `runId`, `handleStop()` in RunScreen skips `completeRunRecord()`, so the run never reaches Supabase. Demo mode runs also skip setup entirely, never creating a DB record.
+- **Files Affected:**
+  - `src/app/setup/page.tsx` — `createRunRecord` can silently fail
+  - `src/components/run/RunScreen.tsx` — `handleStop` requires `runId` to persist
+  - `src/app/recap/page.tsx` — no fallback persistence
+  - `src/lib/services/run-persistence.ts` — requires `runId` for `completeRunRecord`
+- **Fix:** Added fallback persistence in recap page: if user is authenticated but has no `runId`, create the run record and complete it in one shot. Falls back to offline queue if DB write fails.
+- **Verification:** Complete a run (with auth), open `/community` on another device — run should appear within 60 seconds (community page polls every 60s).
+
+---
+
+### BUG-006: Guest name not applied to timeline entries
+- **Severity:** Medium
+- **Status:** Fixed
+- **Reported:** 2026-02-11
+- **Description:** When a guest user sets their name (e.g., "Snowboarder"), completed runs in the community timeline still show "Runner" as the display name.
+- **Root Cause:** The guest name prompt only appeared on the community page (`CommunityTimeline.tsx`), but the recap page adds the run to the timeline store on mount — before the user has visited the community page. The recap page used `getGuestName() ?? 'Runner'` which returned null because the name hadn't been set yet.
+- **Files Affected:**
+  - `src/app/setup/page.tsx` — no guest name input
+  - `src/app/recap/page.tsx` — reads guest name before it's set
+  - `src/components/shared/CommunityTimeline.tsx` — guest prompt only here
+  - `src/lib/store/timeline-store.ts` — no method to update display name
+- **Fix:**
+  1. Added guest name input to setup page (`/setup`) — name is set before the run starts
+  2. Added `updateRunDisplayName()` method to timeline store for retroactive name updates
+  3. When guest name is set on the community page, existing "Runner" entries are retroactively updated
+  4. Setup page greeting now uses guest name: "Ready when you are, Snowboarder"
+- **Verification:** Open app without auth, go to `/setup`, enter name, complete a run, check that name shows in community timeline.
+
+---
+
 ## Fixed Bugs (Historical)
 
 See CLAUDE.md "Past Bugs & Fixes" section for previously resolved issues:
