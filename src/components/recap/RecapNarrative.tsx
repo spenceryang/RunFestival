@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
+import { getApiHeaders } from '@/lib/auth/demo-headers';
 
 interface RecapNarrativeProps {
   distanceMeters: number;
@@ -12,6 +13,7 @@ interface RecapNarrativeProps {
   splits: Array<{ number: number; paceSeconds: number }>;
   persona: string;
   runnerCount: number;
+  onNarrativeLoaded?: (narrative: string) => void;
 }
 
 export function RecapNarrative(props: RecapNarrativeProps) {
@@ -26,7 +28,7 @@ export function RecapNarrative(props: RecapNarrativeProps) {
       try {
         const response = await fetch('/api/recap', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify(props),
         });
 
@@ -36,6 +38,9 @@ export function RecapNarrative(props: RecapNarrativeProps) {
         if (!cancelled) {
           setNarrative(data.narrative);
           setIsLoading(false);
+          if (props.onNarrativeLoaded) {
+            props.onNarrativeLoaded(data.narrative);
+          }
         }
       } catch {
         if (!cancelled) {

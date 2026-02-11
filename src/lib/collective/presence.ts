@@ -2,8 +2,12 @@ import { createClient } from '@/lib/supabase/client';
 import { useCollectiveStore } from '@/lib/store/collective-store';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
-let channel: RealtimeChannel | null = null;
+let cityChannel: RealtimeChannel | null = null;
+let globalChannel: RealtimeChannel | null = null;
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
+// Backwards compatibility alias
+let channel: RealtimeChannel | null = null;
 
 interface PresencePayload {
   user_id: string;
@@ -15,8 +19,24 @@ interface PresencePayload {
 }
 
 /**
- * Join the runners presence channel.
- * Tracks this runner and listens for others.
+ * Normalize city name to a channel-safe slug.
+ * "San Francisco" → "san-francisco"
+ */
+function cityToChannelSlug(city: string): string {
+  return city
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'global';
+}
+
+/**
+ * Join presence channels — both city-specific and global.
+ *
+ * Phase 6 scaling strategy:
+ * - Each city gets its own Realtime channel (`runners:sf`, `runners:nyc`)
+ * - A global channel (`runners:global`) receives aggregated stats from
+ *   the aggregate-stats Edge Function every 30 seconds
+ * - This avoids the 100-user presence limit per channel
  */
 export function joinPresence(runner: {
   userId: string;
@@ -24,20 +44,29 @@ export function joinPresence(runner: {
   city: string;
 }): void {
   const supabase = createClient();
+  const citySlug = cityToChannelSlug(runner.city);
 
-  channel = supabase.channel('runners', {
+  // City-specific channel for nearby runners
+  cityChannel = supabase.channel(`runners:${citySlug}`, {
     config: { presence: { key: runner.userId } },
   });
 
-  // Listen for presence changes (runner count)
-  channel.on('presence', { event: 'sync' }, () => {
-    const state = channel!.presenceState();
-    const runnerCount = Object.keys(state).length;
-    useCollectiveStore.getState().setRunnerCount(runnerCount);
+  // Backwards compat
+  channel = cityChannel;
+
+  // Listen for city-level presence changes
+  cityChannel.on('presence', { event: 'sync' }, () => {
+    const state = cityChannel!.presenceState();
+    const cityCount = Object.keys(state).length;
+    // City count is a minimum — global stats add to this
+    const store = useCollectiveStore.getState();
+    const globalTotal = store.runnerCount;
+    // Use whichever is larger (global may not have updated yet)
+    useCollectiveStore.getState().setRunnerCount(Math.max(cityCount, globalTotal));
   });
 
   // Listen for broadcast events (milestones)
-  channel.on('broadcast', { event: 'milestone' }, ({ payload }) => {
+  cityChannel.on('broadcast', { event: 'milestone' }, ({ payload }) => {
     useCollectiveStore.getState().addEvent({
       type: 'milestone',
       text: payload.text || `${payload.user} in ${payload.city}: ${payload.achievement}`,
@@ -45,9 +74,9 @@ export function joinPresence(runner: {
     });
   });
 
-  channel.subscribe(async (status) => {
+  cityChannel.subscribe(async (status) => {
     if (status === 'SUBSCRIBED') {
-      await channel!.track({
+      await cityChannel!.track({
         user_id: runner.userId,
         display_name: runner.displayName,
         city: runner.city,
@@ -57,6 +86,35 @@ export function joinPresence(runner: {
       } satisfies PresencePayload);
     }
   });
+
+  // Global stats channel — receives aggregated data from Edge Function
+  globalChannel = supabase.channel('runners:global');
+
+  globalChannel.on('broadcast', { event: 'global_stats' }, ({ payload }) => {
+    if (payload.totalRunners) {
+      useCollectiveStore.getState().setRunnerCount(payload.totalRunners);
+    }
+    if (payload.recentEvents) {
+      for (const evt of payload.recentEvents) {
+        useCollectiveStore.getState().addEvent({
+          type: 'collective_stat',
+          text: evt.description || evt.title,
+          timestamp: Date.now(),
+        });
+      }
+    }
+  });
+
+  // Race Director events
+  globalChannel.on('broadcast', { event: 'race_director' }, ({ payload }) => {
+    useCollectiveStore.getState().addEvent({
+      type: 'hype_moment',
+      text: payload.description || payload.title,
+      timestamp: Date.now(),
+    });
+  });
+
+  globalChannel.subscribe();
 }
 
 /**
@@ -66,9 +124,9 @@ export function startHeartbeat(
   getState: () => { distanceMeters: number; currentPaceSecondsPerKm: number }
 ): void {
   heartbeatInterval = setInterval(async () => {
-    if (!channel) return;
+    if (!cityChannel) return;
     const state = getState();
-    await channel.track({
+    await cityChannel.track({
       distance_meters: state.distanceMeters,
       current_pace: state.currentPaceSecondsPerKm,
     });
@@ -76,15 +134,15 @@ export function startHeartbeat(
 }
 
 /**
- * Broadcast a milestone event to all runners.
+ * Broadcast a milestone event to all runners in the city channel.
  */
 export function broadcastMilestone(
   displayName: string,
   city: string,
   achievement: string
 ): void {
-  if (!channel) return;
-  channel.send({
+  if (!cityChannel) return;
+  cityChannel.send({
     type: 'broadcast',
     event: 'milestone',
     payload: {
@@ -97,15 +155,20 @@ export function broadcastMilestone(
 }
 
 /**
- * Leave the presence channel and stop heartbeat.
+ * Leave all presence channels and stop heartbeat.
  */
 export function leavePresence(): void {
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval);
     heartbeatInterval = null;
   }
-  if (channel) {
-    channel.unsubscribe();
-    channel = null;
+  if (cityChannel) {
+    cityChannel.unsubscribe();
+    cityChannel = null;
   }
+  if (globalChannel) {
+    globalChannel.unsubscribe();
+    globalChannel = null;
+  }
+  channel = null;
 }

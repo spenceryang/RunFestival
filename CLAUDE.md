@@ -14,13 +14,15 @@ RunFestival is a deployed PWA that provides real-time AI voice coaching during r
 |-------|------|-------|
 | Framework | Next.js 14 (App Router, TypeScript) | Strict mode |
 | Styling | Tailwind CSS | `festival-*` color tokens |
-| State | Zustand (4 stores) | Client-side only, no persistence |
-| AI Coaching | Claude Sonnet 4.5 (streaming) | Via `/api/coach` edge route |
+| State | Zustand (5 stores) | Run, coaching, collective, timeline, user |
+| Auth | Supabase Auth (magic link) | Email OTP, middleware-protected routes |
+| AI Coaching | Claude Opus 4.6 (streaming) | Via `/api/coach` edge route |
 | TTS | ElevenLabs `eleven_turbo_v2_5` | Via `/api/tts` edge route |
 | Voice Input | Web Speech API | Browser-native, no API key |
 | Maps | Mapbox GL JS | [lng, lat] order — Geolocation uses [lat, lng] |
-| Presence | Supabase Realtime | Ephemeral presence only, no DB tables |
-| GPS Backup | IndexedDB (idb-keyval) | Crash recovery, cleared on run finish |
+| Presence | Supabase Realtime | City-sharded channels + global stats |
+| Persistence | Supabase PostgreSQL | Runs, users, story_seeds, collective_events |
+| GPS Backup | IndexedDB (idb-keyval) | Crash recovery + offline run sync |
 | Deploy | Vercel (edge runtime) | Auto-deploy on push to main |
 
 ## Architecture Overview
@@ -29,35 +31,69 @@ RunFestival is a deployed PWA that provides real-time AI voice coaching during r
 GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
                                     │
                                     ▼ fires trigger
-                              Context Builder
-                           (run state + collective + coaching history)
+                     ┌──────────────┴──────────────┐
+                     │        Context Builder       │
+                     │ (run state + collective +    │
+                     │  coaching history +          │
+                     │  specialist agent outputs)   │
+                     └──────────────┬──────────────┘
+                                    │
+     ┌──────────────┬───────────────┼───────────────┐
+     │              │               │               │
+ Pace Strategist  Motivation   Story Curator    Quality
+ (rule-based)     Engine       (async Opus)     Supervisor
+                  (rule-based)                  (async Opus)
                                     │
                                     ▼
                               Audio Manager
                            ┌────────┴────────┐
                            │                  │
                     POST /api/coach    POST /api/tts
-                    (Claude streaming)  (ElevenLabs per sentence)
+                    (Opus 4.6 stream)  (ElevenLabs per sentence)
                            │                  │
                            ▼                  ▼
                     Sentence parser ──► Web Audio API playback
                            │
                            ▼
-                    CoachingStore (track what was said)
+                    CoachingStore (track what was said + quality scores)
 ```
 
 ## File Map
 
 ### Stores (`src/lib/store/`)
-- **`run-store.ts`** — GPS points, distance, pace, splits, persona, run status
-- **`coaching-store.ts`** — Last 8 coaching messages with summaries, topics, cliffhanger tracking
+- **`run-store.ts`** — GPS points, distance, pace, splits, persona, run status, runId
+- **`coaching-store.ts`** — Last 8 coaching messages, quality reviews, cached story plans
 - **`collective-store.ts`** — Live runner count, events, average pace
-- **`timeline-store.ts`** — Completed runs feed (all synthetic for now)
+- **`timeline-store.ts`** — Completed runs feed
+- **`user-store.ts`** — Auth user profile (maps Supabase snake_case to camelCase)
 
 ### API Routes (`src/app/api/`)
-- **`coach/route.ts`** — Proxies to Claude API. Streams SSE. Dynamic max_tokens: 400 for storytelling/user-initiated, 150 for alerts. Injects conversation history into prompt.
+- **`coach/route.ts`** — Proxies to Claude Opus 4.6. Streams SSE. 600 tokens for storytelling, 200 for alerts. Includes specialist agent outputs.
 - **`tts/route.ts`** — Proxies to ElevenLabs. Streams MP3 audio. Uses persona-specific voice IDs.
 - **`recap/route.ts`** — Sends run stats to Claude for post-run narrative. Non-streaming, 200 tokens.
+- **`story-plan/route.ts`** — Story Curator agent. Generates 3-part story plans via Opus 4.6. Async.
+- **`quality/route.ts`** — Quality Supervisor agent. Reviews coaching messages. Score 1-5 + feedback. Async.
+
+### Specialist Agents (`src/lib/agents/`)
+- **`pace-strategist.ts`** — Rule-based. Analyzes splits, projects finish time, classifies pacing strategy. Zero API cost.
+- **`motivation-engine.ts`** — Rule-based. Detects struggle vs flow state from pace trends. Zero API cost.
+- **`story-curator.ts`** — Generates story plans via Opus 4.6. Called async on first idle trigger. Cached for subsequent triggers.
+- **`quality-supervisor.ts`** — Reviews every 3rd coaching message via Opus 4.6. Non-blocking.
+
+### Auth (`src/lib/auth/` + `src/app/auth/` + `middleware.ts`)
+- **`middleware.ts`** — Protects /setup, /run, /recap, /profile. Bypasses auth for ?demo=true.
+- **`auth/login/page.tsx`** — Magic link login (Supabase OTP).
+- **`auth/callback/route.ts`** — Handles magic link redirect + profile check.
+- **`demo-headers.ts`** — Adds X-Demo-Mode header when user is not authenticated.
+
+### Services (`src/lib/services/`)
+- **`run-persistence.ts`** — CRUD for runs table (createRunRecord, completeRunRecord, updateRunAiSummary).
+- **`offline-sync.ts`** — Queues failed run completions in IndexedDB, syncs on next app load.
+
+### Global Agents (`supabase/functions/`)
+- **`race-director/`** — Scans active runners every 60s, detects patterns, generates collective moments via Opus 4.6.
+- **`story-library/`** — Daily job. Generates story seeds by topic + activity type. Stored in story_seeds table.
+- **`aggregate-stats/`** — Aggregates presence across city channels every 30s, publishes to runners:global.
 
 ### Voice Pipeline (`src/lib/coach/` + `src/lib/audio/`)
 - **`trigger-engine.ts`** — Evaluates triggers every 3s. Priority: split > pace_drift > halfway > final_push > idle_storytelling. Min 45s between messages.
@@ -78,9 +114,12 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **`demo-data.ts`** — Golden Gate Park 5K loop (350 points)
 
 ### Pages (`src/app/`)
-- **`/setup`** — Pre-run config (distance, pace, persona)
-- **`/run`** — Main run screen (GPS + coaching + voice)
-- **`/recap`** — Post-run map, splits, AI narrative
+- **`/`** — Home. Auth-aware: shows profile link or login button.
+- **`/auth/login`** — Magic link login.
+- **`/profile`** — Profile setup/edit. Onboarding mode for new users.
+- **`/setup`** — Pre-run config. Pre-fills from user preferences.
+- **`/run`** — Main run screen (GPS + coaching + agents + voice).
+- **`/recap`** — Post-run map, splits, AI narrative. Persists AI summary.
 - **`/dev`** — Password-gated dev mode entry (password: `claude`)
 - **`/community`** — Live runner feed
 
@@ -106,7 +145,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **Streaming responses**: `/api/coach` and `/api/tts` both stream. Don't buffer full responses.
 
 ### Testing
-- **144 tests** across 11 test files. All must pass before pushing.
+- **197 tests** across 17 test files. All must pass before pushing.
 - **Ask before deleting any tests.** User's explicit standing instruction.
 - Run: `npx vitest run`
 - Build: `npx next build`
@@ -125,12 +164,27 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 ### 6 Trigger Types
 | Trigger | When | Token Limit |
 |---------|------|-------------|
-| `split_complete` | Runner completes 1km | 150 |
-| `pace_drift` | >15% off target for 60s | 150 |
-| `halfway` | Crosses 50% of target distance | 150 |
-| `final_push` | Enters last 10% of distance | 150 |
-| `idle_storytelling` | 3+ min without coaching | 400 |
-| `user_initiated` | Runner taps mic / speaks | 400 |
+| `split_complete` | Runner completes 1km | 200 |
+| `pace_drift` | >15% off target for 60s | 200 |
+| `halfway` | Crosses 50% of target distance | 200 |
+| `final_push` | Enters last 10% of distance | 200 |
+| `idle_storytelling` | 3+ min without coaching | 600 |
+| `user_initiated` | Runner taps mic / speaks | 600 |
+
+### Multi-Agent Architecture
+Each run session has a **per-user agent team**:
+- **Head Coach (Opus 4.6)** — owns the voice, makes final creative decisions
+- **Pace Strategist (rule-based)** — analyzes splits, projects finish, classifies strategy
+- **Motivation Engine (rule-based)** — detects struggle/flow, picks energy approach
+- **Story Curator (Opus 4.6, async)** — pre-generates story plans for idle triggers
+- **Quality Supervisor (Opus 4.6, async)** — reviews every 3rd message, stores feedback
+
+Global agents (Supabase Edge Functions):
+- **Race Director (Opus 4.6, every 60s)** — detects cross-runner patterns, generates collective moments
+- **Story Library (Opus 4.6, daily)** — generates story seeds by topic + activity type
+- **Aggregate Stats (every 30s)** — aggregates presence across city channels
+
+See `docs/AGENTS.md` for full architecture details.
 
 ### Conversation History
 - CoachingStore tracks last 8 messages with summaries + topics + cliffhanger flags
@@ -141,10 +195,9 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 ## Known Limitations
 
 - **TTS is not truly streaming**: `tts-client.ts` calls `response.arrayBuffer()` which buffers the full audio per sentence before playback. True chunk-level streaming would reduce latency further but requires Web Audio API chunk decoding.
-- **No user accounts / auth**: No login, no persistent run history. Everything is session-scoped.
-- **No offline coaching**: Claude + ElevenLabs require internet. GPS tracking works offline (IndexedDB), but coaching goes silent.
-- **Supabase presence only**: No database tables, no stored data. If Supabase is down, app uses synthetic runner data.
-- **Profile data is hardcoded**: Runner name, city, story topics are hardcoded in `run/page.tsx`. No profile settings UI yet.
+- **No offline coaching**: Claude + ElevenLabs require internet. GPS tracking works offline (IndexedDB), but coaching goes silent. Completed runs are queued and synced on next app load.
+- **Global agents need scheduler**: Race Director and Story Library Edge Functions need an external cron scheduler (pg_cron or Vercel cron). Not auto-scheduled yet.
+- **Opus 4.6 cost**: Head Coach + Story Curator + Quality Supervisor use Opus 4.6. Estimated ~$0.17 per 30-min run. Monitor usage.
 
 ## Dev / Demo Modes
 

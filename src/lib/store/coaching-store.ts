@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import type { TriggerType } from '@/types/coach';
+import type { QualityReview } from '@/lib/agents/quality-supervisor';
+import type { StoryPlan } from '@/lib/agents/story-curator';
 
 export interface CoachingHistoryEntry {
   triggerType: TriggerType;
@@ -9,15 +11,21 @@ export interface CoachingHistoryEntry {
   hasCliffhanger: boolean;
   userMessage?: string;
   timestamp: number;
+  qualityScore?: number;
+  qualityFeedback?: string;
 }
 
 interface CoachingStore {
   history: CoachingHistoryEntry[];
+  qualityReviews: QualityReview[];
+  cachedStoryPlan: StoryPlan | null;
 
   addMessage: (entry: CoachingHistoryEntry) => void;
   getRecentHistory: (count?: number) => CoachingHistoryEntry[];
   getTopicsCovered: () => string[];
   getLastCliffhanger: () => string | null;
+  addQualityReview: (review: QualityReview) => void;
+  setStoryPlan: (plan: StoryPlan | null) => void;
   reset: () => void;
 }
 
@@ -25,6 +33,8 @@ const MAX_HISTORY = 8;
 
 export const useCoachingStore = create<CoachingStore>((set, get) => ({
   history: [],
+  qualityReviews: [],
+  cachedStoryPlan: null,
 
   addMessage: (entry) =>
     set((state) => ({
@@ -41,12 +51,18 @@ export const useCoachingStore = create<CoachingStore>((set, get) => ({
   getLastCliffhanger: () => {
     const last = get().history.find((h) => h.hasCliffhanger);
     if (!last) return null;
-    // Return the last sentence of the cliffhanger message
     const sentences = last.text.match(/[^.!?]+[.!?]+/g);
     return sentences ? sentences[sentences.length - 1].trim() : last.text.slice(-100);
   },
 
-  reset: () => set({ history: [] }),
+  addQualityReview: (review) =>
+    set((state) => ({
+      qualityReviews: [...state.qualityReviews, review].slice(-10),
+    })),
+
+  setStoryPlan: (plan) => set({ cachedStoryPlan: plan }),
+
+  reset: () => set({ history: [], qualityReviews: [], cachedStoryPlan: null }),
 }));
 
 // --- Helper functions (zero-latency, regex-based) ---

@@ -18,11 +18,20 @@ Think Peloton energy, but for the open road.
 
 ## Features
 
-### AI Voice Coaching
-- 4 coaching personas with distinct voices and personalities
-- Context-aware triggers: split completion, pace drift, halfway, final push, idle storytelling
+### Multi-Agent AI Coaching
+- **Head Coach (Opus 4.6)** — 4 coaching personas with distinct voices and personalities
+- **Pace Strategist** — Rule-based split analysis, finish projection, pacing strategy classification
+- **Motivation Engine** — Detects struggle vs flow state, adapts coaching energy
+- **Story Curator** — Async story planning for idle storytelling triggers
+- **Quality Supervisor** — Reviews every 3rd coaching message, improves future prompts
 - Sentence-level streaming for <5s latency (Claude API to ElevenLabs TTS to Web Audio)
 - Mid-run voice input via Web Speech API
+
+### User Accounts & Run Persistence
+- Magic link authentication (Supabase Auth)
+- Profile setup: name, city, experience level, persona, story topics, activity types
+- All runs saved to PostgreSQL with splits, GPS, coaching messages, AI recap
+- Offline sync: failed run completions queued in IndexedDB, synced on next login
 
 ### GPS Run Tracking
 - Real-time pace, distance, and elapsed time
@@ -31,19 +40,21 @@ Think Peloton energy, but for the open road.
 - Offline-capable with IndexedDB backup
 - Wake Lock keeps your screen on
 
-### Community Presence
-- Live runner count via Supabase Realtime
+### Community Presence (Scalable to 10K)
+- City-sharded Supabase Realtime channels (`runners:sf`, `runners:nyc`)
+- Global stats aggregation via Edge Function
+- Race Director agent detects cross-runner patterns
 - Milestone feed from other runners worldwide
-- Community run timeline
 
 ### Post-Run Recap
 - AI-generated narrative analyzing your pace, splits, and patterns
 - Mapbox pace heatmap (green = fast, orange = on pace, red = slow)
 - Split table with target pace comparison
+- Recap persisted alongside run data
 
 ### Dev / Demo Mode
-- Demo mode: simulated 5K at 10x speed
-- Dev mode: password-protected SF Marathon 2026 route simulation with adjustable speed (5x/10x/20x/50x) and GPS debug panel
+- Demo mode: simulated 5K at 10x speed (works without login)
+- Dev mode: password-protected SF Marathon 2026 route simulation with adjustable speed
 
 ## Coaching Personas
 
@@ -62,7 +73,7 @@ Think Peloton energy, but for the open road.
 | Styling | Tailwind CSS |
 | State | Zustand |
 | Backend | Supabase (Auth, PostgreSQL, Realtime) |
-| AI | Claude API (Sonnet 4.5, streaming) |
+| AI | Claude API (Opus 4.6, streaming) |
 | TTS | ElevenLabs (Turbo v2.5, streaming) |
 | Voice Input | Web Speech API |
 | Maps | Mapbox GL JS |
@@ -106,7 +117,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 npm run dev          # Development server
 npm run build        # Production build
 npm run start        # Production server
-npm run test         # Run all tests (144 tests)
+npm run test         # Run all tests (197 tests)
 npm run test:watch   # Watch mode
 ```
 
@@ -131,25 +142,39 @@ src/
     gps/             # Tracker, distance/pace math, demo routes
     coach/           # Trigger engine, context builder, prompts
     audio/           # TTS client, audio manager, voice input
-    store/           # Zustand stores (run, collective, timeline)
-    supabase/        # Client + server instances
-    collective/      # Presence, synthetic runners
+    agents/          # Specialist agents (pace, motivation, story, quality)
+    store/           # Zustand stores (run, coaching, collective, timeline, user)
+    services/        # Run persistence, offline sync
+    auth/            # Demo mode headers
+    supabase/        # Client, server, edge instances
+    collective/      # Presence (city-sharded), synthetic runners
   types/             # TypeScript interfaces
+supabase/
+  functions/
+    race-director/   # Global: cross-runner pattern detection
+    story-library/   # Global: daily story seed generation
+    aggregate-stats/ # Global: cross-city presence aggregation
 ```
 
 ## How It Works
 
-1. **Setup** — Choose distance, target pace, and coaching persona
-2. **Run** — GPS tracking starts; coaching triggers evaluate every 3 seconds
-3. **Coach** — Trigger fires, context assembled, streamed to Claude, then sentence-by-sentence to ElevenLabs TTS, played via Web Audio API
-4. **Community** — Supabase Realtime broadcasts your presence; you see others running
-5. **Recap** — AI narrative, pace heatmap on Mapbox, split-by-split analysis
+1. **Sign Up** — Magic link email authentication (or continue in demo mode)
+2. **Profile** — Set your name, persona preference, story topics, activity types
+3. **Setup** — Choose distance, target pace, and coaching persona (pre-filled from profile)
+4. **Run** — GPS tracking starts; 5 agents work together:
+   - Trigger engine evaluates every 3s → Pace Strategist and Motivation Engine enrich context → Head Coach (Opus 4.6) generates response → TTS → Audio playback
+   - Story Curator pre-generates story plans (async) for idle triggers
+   - Quality Supervisor reviews every 3rd message (async) and feeds improvements back
+5. **Community** — City-sharded presence channels; Race Director generates cross-runner moments
+6. **Recap** — AI narrative, pace heatmap, splits — all persisted to your profile
+7. **Offline** — If Supabase is unreachable, run data is queued and synced on next login
 
 ## Documentation
 
-- [PRD.md](docs/PRD.md) — Product requirements
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — System architecture and data flows
-- [PROMPTS.md](docs/PROMPTS.md) — Coaching persona system prompts
+- [PRD.md](PRD.md) — Product requirements
+- [ARCHITECTURE.md](ARCHITECTURE.md) — System architecture and data flows
+- [PROMPTS.md](PROMPTS.md) — Coaching persona system prompts
+- [AGENTS.md](docs/AGENTS.md) — Multi-agent architecture details
 
 ## License
 

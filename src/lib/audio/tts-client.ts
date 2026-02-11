@@ -1,4 +1,5 @@
 import type { PersonaVoiceConfig } from '@/types/coach';
+import { getApiHeaders } from '@/lib/auth/demo-headers';
 
 /**
  * Request TTS audio from ElevenLabs via our proxy endpoint.
@@ -10,7 +11,7 @@ export async function requestTTS(
 ): Promise<ArrayBuffer> {
   const response = await fetch('/api/tts', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getApiHeaders(),
     body: JSON.stringify({
       text,
       voiceId: voiceConfig.elevenLabsVoiceId,

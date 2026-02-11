@@ -18,6 +18,10 @@ import {
   detectCliffhanger,
 } from '@/lib/store/coaching-store';
 import type { CoachingHistory } from '@/lib/coach/context-builder';
+import { useUserStore } from '@/lib/store/user-store';
+import { generateStoryPlan } from '@/lib/agents/story-curator';
+import { shouldReview, reviewCoachingMessage, formatQualityFeedback } from '@/lib/agents/quality-supervisor';
+import { formatPace } from '@/lib/gps/pace';
 
 export default function RunPageWrapper() {
   return (
@@ -39,6 +43,24 @@ function RunPage() {
   const prevSnapshotRef = useRef<typeof store | null>(null);
   const triggerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isListening, setIsListening] = useState(false);
+  const userProfile = useUserStore((s) => s.user);
+
+  const getUserProfileForCoaching = useCallback(() => {
+    if (userProfile) {
+      return {
+        name: userProfile.name,
+        city: userProfile.city ?? 'Unknown',
+        experienceLevel: userProfile.experienceLevel,
+        storyTopics: userProfile.storyTopics,
+      };
+    }
+    return {
+      name: 'Runner',
+      city: 'Unknown',
+      experienceLevel: 'intermediate' as const,
+      storyTopics: ['history', 'science'],
+    };
+  }, [userProfile]);
 
   const getCoachingHistory = useCallback((): CoachingHistory => {
     const store = useCoachingStore.getState();
@@ -53,9 +75,12 @@ function RunPage() {
     };
   }, []);
 
+  const messageCountRef = useRef(0);
+
   const buildOnComplete = useCallback(
     (triggerType: string, userMessage?: string) => {
       return (fullText: string) => {
+        const idx = messageCountRef.current++;
         useCoachingStore.getState().addMessage({
           triggerType: triggerType as import('@/types/coach').TriggerType,
           text: fullText,
@@ -65,9 +90,40 @@ function RunPage() {
           userMessage,
           timestamp: Date.now(),
         });
+
+        // Async: fire story plan generation on first idle trigger
+        if (triggerType === 'idle_storytelling' && !useCoachingStore.getState().cachedStoryPlan) {
+          const profile = getUserProfileForCoaching();
+          generateStoryPlan({
+            userInterests: profile.storyTopics,
+            activityType: userProfile?.activityTypes?.[0] ?? 'running',
+            topicsCovered: useCoachingStore.getState().getTopicsCovered(),
+            persona: useRunStore.getState().persona,
+          }).then((plan) => {
+            if (plan) useCoachingStore.getState().setStoryPlan(plan);
+          });
+        }
+
+        // Async: fire quality review every 3rd message
+        if (shouldReview(idx)) {
+          const runState = useRunStore.getState();
+          reviewCoachingMessage({
+            coachingMessage: fullText,
+            triggerType,
+            persona: runState.persona,
+            runContext: {
+              distanceKm: runState.distanceMeters / 1000,
+              paceFormatted: formatPace(runState.currentPaceSecondsPerKm),
+              elapsedMinutes: runState.elapsedSeconds / 60,
+            },
+            previousTopics: useCoachingStore.getState().getTopicsCovered(),
+          }).then((review) => {
+            if (review) useCoachingStore.getState().addQualityReview(review);
+          });
+        }
       };
     },
-    []
+    [getUserProfileForCoaching, userProfile]
   );
 
   // Initialize coaching systems
@@ -120,6 +176,8 @@ function RunPage() {
 
       if (trigger) {
         const collectiveState = useCollectiveStore.getState();
+        const coachingState = useCoachingStore.getState();
+        const qualityFeedback = formatQualityFeedback(coachingState.qualityReviews);
         const context = buildCoachingContext(
           currentState.persona,
           trigger.type,
@@ -133,14 +191,11 @@ function RunPage() {
             splits: currentState.splits,
             isPaused: false,
           },
-          {
-            name: 'Runner',
-            city: 'Unknown',
-            experienceLevel: 'intermediate',
-            storyTopics: ['history', 'science'],
-          },
+          getUserProfileForCoaching(),
           collectiveState,
-          getCoachingHistory()
+          getCoachingHistory(),
+          coachingState.cachedStoryPlan,
+          qualityFeedback
         );
         audioManagerRef.current?.enqueue(context, buildOnComplete(trigger.type));
       }
@@ -153,7 +208,7 @@ function RunPage() {
       voiceInputRef.current?.destroy();
       useCoachingStore.getState().reset();
     };
-  }, [store.status, router, getCoachingHistory, buildOnComplete]);
+  }, [store.status, router, getCoachingHistory, buildOnComplete, getUserProfileForCoaching]);
 
   const handleFinish = useCallback(() => {
     router.push('/recap');
@@ -177,6 +232,8 @@ function RunPage() {
       splits: currentState.splits,
     });
 
+    const coachingState = useCoachingStore.getState();
+    const qualityFeedback = formatQualityFeedback(coachingState.qualityReviews);
     const context = buildCoachingContext(
       currentState.persona,
       trigger.type,
@@ -190,14 +247,11 @@ function RunPage() {
         splits: currentState.splits,
         isPaused: currentState.status === 'paused',
       },
-      {
-        name: 'Runner',
-        city: 'Unknown',
-        experienceLevel: 'intermediate',
-        storyTopics: ['history', 'science'],
-      },
+      getUserProfileForCoaching(),
       collectiveState,
-      getCoachingHistory()
+      getCoachingHistory(),
+      coachingState.cachedStoryPlan,
+      qualityFeedback
     );
 
     // Attach the runner's spoken message if provided
@@ -208,7 +262,7 @@ function RunPage() {
     }
 
     audioManagerRef.current.enqueue(context, buildOnComplete(trigger.type, userMessage));
-  }, [getCoachingHistory, buildOnComplete]);
+  }, [getCoachingHistory, buildOnComplete, getUserProfileForCoaching]);
 
   const handleTalkToCoach = useCallback(() => {
     // If already listening, stop and fall back to regular coach trigger

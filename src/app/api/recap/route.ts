@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { createEdgeSupabaseClient } from '@/lib/supabase/edge';
 
 export const runtime = 'edge';
 
@@ -9,6 +10,18 @@ export async function POST(request: NextRequest) {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  // Auth check — skip for demo mode
+  if (request.headers.get('x-demo-mode') !== 'true') {
+    const supabase = createEdgeSupabaseClient(request);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   let data: {

@@ -21,6 +21,9 @@ interface RunStore {
   persona: CoachingPersona;
   distanceUnit: 'km' | 'mi';
 
+  // Persistence
+  runId: string | null;
+
   // Actions
   setStatus: (status: RunStatus) => void;
   startRun: (config: {
@@ -35,6 +38,7 @@ interface RunStore {
   finishRun: () => void;
   resetRun: () => void;
   setDistanceUnit: (unit: 'km' | 'mi') => void;
+  setRunId: (id: string | null) => void;
 }
 
 const SPLIT_DISTANCE_KM = 1000; // 1 km splits (in meters)
@@ -53,6 +57,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   gpsPoints: [],
   persona: 'hype',
   distanceUnit: 'km',
+  runId: null,
 
   setStatus: (status) => set({ status }),
 
@@ -70,6 +75,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
       startedAt: Date.now(),
       gpsPoints: [],
       persona: config.persona,
+      runId: null,
     }),
 
   addGpsPoint: (point) => {
@@ -146,7 +152,10 @@ export const useRunStore = create<RunStore>((set, get) => ({
       splits: [],
       startedAt: null,
       gpsPoints: [],
+      runId: null,
     }),
 
   setDistanceUnit: (unit) => set({ distanceUnit: unit }),
+
+  setRunId: (id) => set({ runId: id }),
 }));

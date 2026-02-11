@@ -1,14 +1,17 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Play, Users, Zap, Monitor } from 'lucide-react';
+import { Play, Users, Zap, Monitor, User, LogIn } from 'lucide-react';
 import { useCollectiveStore } from '@/lib/store/collective-store';
 import { useRunStore } from '@/lib/store/run-store';
+import { useUserStore } from '@/lib/store/user-store';
 
 export default function HomePage() {
   const router = useRouter();
   const runnerCount = useCollectiveStore((s) => s.runnerCount);
   const startRun = useRunStore((s) => s.startRun);
+  const user = useUserStore((s) => s.user);
+  const isAuthenticated = useUserStore((s) => s.isAuthenticated);
 
   const handleDemo = () => {
     startRun({
@@ -21,6 +24,29 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-festival-darker flex flex-col">
+      {/* Auth bar */}
+      <div className="flex items-center justify-end px-6 pt-4">
+        {isAuthenticated && user ? (
+          <button
+            onClick={() => router.push('/profile')}
+            className="flex items-center gap-2 text-sm text-festival-text
+                       hover:text-festival-orange transition-colors"
+          >
+            <User className="w-4 h-4" />
+            {user.name}
+          </button>
+        ) : (
+          <button
+            onClick={() => router.push('/auth/login')}
+            className="flex items-center gap-2 text-sm text-festival-muted
+                       hover:text-festival-orange transition-colors"
+          >
+            <LogIn className="w-4 h-4" />
+            Log In
+          </button>
+        )}
+      </div>
+
       {/* Hero section */}
       <div className="flex-1 flex flex-col items-center justify-center px-6">
         {/* Logo / Brand */}

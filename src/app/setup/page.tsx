@@ -7,23 +7,43 @@ import { DistanceSelector } from '@/components/setup/DistanceSelector';
 import { PaceSelector } from '@/components/setup/PaceSelector';
 import { PersonaSelector } from '@/components/setup/PersonaSelector';
 import { useRunStore } from '@/lib/store/run-store';
+import { useUserStore } from '@/lib/store/user-store';
+import { createRunRecord } from '@/lib/services/run-persistence';
 import type { CoachingPersona } from '@/types/run';
 
 export default function SetupPage() {
   const router = useRouter();
   const startRun = useRunStore((s) => s.startRun);
+  const setRunId = useRunStore((s) => s.setRunId);
   const distanceUnit = useRunStore((s) => s.distanceUnit);
+  const user = useUserStore((s) => s.user);
 
   const [distance, setDistance] = useState<number | null>(5000);
   const [pace, setPace] = useState<number | null>(null);
-  const [persona, setPersona] = useState<CoachingPersona>('hype');
+  const [persona, setPersona] = useState<CoachingPersona>(
+    user?.preferredPersona ?? 'hype'
+  );
 
-  const handleGo = () => {
+  const handleGo = async () => {
     startRun({
       targetDistanceMeters: distance,
       targetPaceSecondsPerKm: pace,
       persona,
     });
+
+    // Create run record in Supabase if authenticated
+    if (user) {
+      const runId = await createRunRecord({
+        userId: user.id,
+        targetDistanceMeters: distance,
+        targetPaceSecondsPerKm: pace,
+        persona,
+      });
+      if (runId) {
+        setRunId(runId);
+      }
+    }
+
     router.push('/run');
   };
 

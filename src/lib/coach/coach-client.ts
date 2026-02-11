@@ -1,4 +1,5 @@
 import type { CoachingContext } from '@/types/coach';
+import { getApiHeaders } from '@/lib/auth/demo-headers';
 
 /**
  * Stream coaching text from Claude via our API proxy.
@@ -14,7 +15,7 @@ export async function streamCoachingMessage(
   try {
     const response = await fetch('/api/coach', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders(),
       body: JSON.stringify(context),
     });
 

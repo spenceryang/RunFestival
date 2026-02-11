@@ -1,8 +1,10 @@
 'use client';
 
+import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRunStore } from '@/lib/store/run-store';
 import { useCollectiveStore } from '@/lib/store/collective-store';
+import { updateRunAiSummary } from '@/lib/services/run-persistence';
 import { RecapStats } from '@/components/recap/RecapStats';
 import { SplitsTable } from '@/components/recap/SplitsTable';
 import { RecapNarrative } from '@/components/recap/RecapNarrative';
@@ -19,6 +21,12 @@ export default function RecapPage() {
     collective.reset();
     router.push('/');
   };
+
+  const handleNarrativeLoaded = useCallback((narrative: string) => {
+    if (store.runId) {
+      updateRunAiSummary(store.runId, narrative);
+    }
+  }, [store.runId]);
 
   return (
     <div className="min-h-screen bg-festival-darker px-6 py-8">
@@ -60,6 +68,7 @@ export default function RecapPage() {
           splits={store.splits.map((s) => ({ number: s.number, paceSeconds: s.paceSeconds }))}
           persona={store.persona}
           runnerCount={collective.runnerCount}
+          onNarrativeLoaded={handleNarrativeLoaded}
         />
       </div>
 

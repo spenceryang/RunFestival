@@ -42,6 +42,26 @@ export interface CoachingContext {
     averagePaceFormatted: string;
   };
   userMessage?: string;
+  paceAnalysis?: {
+    strategy: string;
+    advice: string;
+    projectedFinishSeconds: number | null;
+    recentTrend: string;
+    splitVariation: number;
+  };
+  motivationState?: {
+    energyLevel: string;
+    approach: string;
+    shouldBoost: boolean;
+    recentPaceTrend: number;
+  };
+  storyPlan?: {
+    title: string;
+    topic: string;
+    arc: { part1: string; part2: string; part3: string };
+    keyFacts: string[];
+  };
+  qualityFeedback?: string;
   conversationHistory?: {
     recentMessages: Array<{
       triggerType: TriggerType;

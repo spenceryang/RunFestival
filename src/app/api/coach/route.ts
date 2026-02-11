@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { buildSystemPrompt, buildTriggerPrompt } from '@/lib/coach/prompts';
+import { createEdgeSupabaseClient } from '@/lib/supabase/edge';
 import type { CoachingContext } from '@/types/coach';
 
 export const runtime = 'edge';
@@ -11,6 +12,18 @@ export async function POST(request: NextRequest) {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  // Auth check — skip for demo mode
+  if (request.headers.get('x-demo-mode') !== 'true') {
+    const supabase = createEdgeSupabaseClient(request);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   let context: CoachingContext;
@@ -33,7 +46,35 @@ export async function POST(request: NextRequest) {
 
   // Storytelling and user-initiated get more room for longer responses
   const isLongForm = context.trigger.type === 'idle_storytelling' || context.trigger.type === 'user_initiated';
-  const maxTokens = isLongForm ? 400 : 150;
+  const maxTokens = isLongForm ? 600 : 200;
+
+  // Build specialist agent sections
+  const paceSection = context.paceAnalysis
+    ? `\nPACE ANALYSIS (from Pace Strategist):
+- Strategy: ${context.paceAnalysis.strategy}
+- Trend: ${context.paceAnalysis.recentTrend}
+${context.paceAnalysis.advice ? `- Advice: ${context.paceAnalysis.advice}` : ''}
+${context.paceAnalysis.projectedFinishSeconds ? `- Projected finish: ${formatTimeInline(context.paceAnalysis.projectedFinishSeconds)}` : ''}`
+    : '';
+
+  const motivationSection = context.motivationState
+    ? `\nENERGY STATE (from Motivation Engine):
+- Energy level: ${context.motivationState.energyLevel}
+- Approach: ${context.motivationState.approach}`
+    : '';
+
+  const storySection = context.storyPlan
+    ? `\nSTORY PLAN (from Story Curator — use this as raw material, adapt to your voice):
+- Title: ${context.storyPlan.title}
+- Topic: ${context.storyPlan.topic}
+- Current chapter: ${context.storyPlan.arc.part1}
+- Key facts: ${context.storyPlan.keyFacts.join(', ')}`
+    : '';
+
+  const qualitySection = context.qualityFeedback
+    ? `\nCOACHING NOTES (from Quality Supervisor — incorporate this feedback):
+${context.qualityFeedback}`
+    : '';
 
   const userMessage = `${effectiveTriggerPrompt}
 
@@ -42,6 +83,8 @@ CURRENT RUN STATE:
 - Current pace: ${formatPaceInline(context.runState.currentPaceSecondsPerKm)}/km${context.runState.targetPaceSecondsPerKm ? ` (target: ${formatPaceInline(context.runState.targetPaceSecondsPerKm)}/km)` : ''}
 - Elapsed: ${formatTimeInline(context.runState.elapsedSeconds)}
 - Splits: ${context.runState.splits.map((s) => `Split ${s.number}: ${formatPaceInline(s.paceSeconds)}/km`).join(', ') || 'None yet'}
+${paceSection}
+${motivationSection}
 
 LIVE COLLECTIVE:
 - ${context.collective.runnerCount} people running right now
@@ -51,6 +94,8 @@ ${context.collective.recentEvents.length > 0 ? `- Recent: ${context.collective.r
 RUNNER PROFILE:
 - Name: ${context.profile.name}
 ${context.profile.storyTopics.length > 0 ? `- Story topics: ${context.profile.storyTopics.join(', ')}` : ''}
+${storySection}
+${qualitySection}
 ${buildHistorySection(context)}
 ${JSON.stringify(context.trigger.data)}`;
 
@@ -63,7 +108,7 @@ ${JSON.stringify(context.trigger.data)}`;
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
+        model: 'claude-opus-4-6',
         max_tokens: maxTokens,
         stream: true,
         system: systemPrompt,

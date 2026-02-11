@@ -9,6 +9,10 @@ import { formatPace, formatTime, formatDistance } from '@/lib/gps/pace';
 import { PaceDisplay } from './PaceDisplay';
 import { RunControls } from './RunControls';
 import { CollectiveBanner } from './CollectiveBanner';
+import { useCollectiveStore } from '@/lib/store/collective-store';
+import { useCoachingStore } from '@/lib/store/coaching-store';
+import { completeRunRecord } from '@/lib/services/run-persistence';
+import { queueRunForSync } from '@/lib/services/offline-sync';
 
 interface RunScreenProps {
   onFinish: () => void;
@@ -112,6 +116,30 @@ export function RunScreen({ onFinish, onTalkToCoach, isListening = false }: RunS
     timerRef.current = null;
     saveIntervalRef.current = null;
     await releaseWakeLock();
+
+    // Persist run to Supabase if we have a run ID (authenticated user)
+    const state = useRunStore.getState();
+    if (state.runId) {
+      const runData = {
+        runId: state.runId,
+        distanceMeters: state.distanceMeters,
+        elapsedSeconds: state.elapsedSeconds,
+        averagePaceSecondsPerKm: state.averagePaceSecondsPerKm,
+        splits: state.splits,
+        gpsPoints: state.gpsPoints,
+        coachingMessages: useCoachingStore.getState().history.map((h) => ({
+          triggerType: h.triggerType,
+          text: h.text,
+          timestamp: h.timestamp,
+        })),
+        collectiveCount: useCollectiveStore.getState().runnerCount,
+      };
+      const success = await completeRunRecord(runData);
+      if (!success) {
+        await queueRunForSync(runData);
+      }
+    }
+
     await clearRunData();
     onFinish();
   }, [store, onFinish]);

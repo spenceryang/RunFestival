@@ -2,6 +2,9 @@ import type { CoachingPersona } from '@/types/run';
 import type { TriggerType, CoachingContext } from '@/types/coach';
 import type { CollectiveState } from '@/types/collective';
 import { formatPace } from '@/lib/gps/pace';
+import { analyzePace } from '@/lib/agents/pace-strategist';
+import { assessMotivation } from '@/lib/agents/motivation-engine';
+import type { StoryPlan } from '@/lib/agents/story-curator';
 
 interface RunSnapshot {
   distanceMeters: number;
@@ -10,7 +13,7 @@ interface RunSnapshot {
   averagePaceSecondsPerKm: number;
   targetPaceSecondsPerKm: number | null;
   targetDistanceMeters: number | null;
-  splits: Array<{ number: number; paceSeconds: number }>;
+  splits: Array<{ number: number; paceSeconds: number; distanceMeters?: number; elapsedSeconds?: number }>;
   isPaused: boolean;
 }
 
@@ -37,8 +40,33 @@ export function buildCoachingContext(
   runState: RunSnapshot,
   profile: UserProfile,
   collective: CollectiveState,
-  history?: CoachingHistory
+  history?: CoachingHistory,
+  storyPlan?: StoryPlan | null,
+  qualityFeedback?: string | null
 ): CoachingContext {
+  // Run specialist agents (zero-cost, rule-based)
+  const paceAnalysis = analyzePace(
+    runState.splits.map((s) => ({
+      number: s.number,
+      paceSeconds: s.paceSeconds,
+      distanceMeters: s.distanceMeters ?? 1000,
+      elapsedSeconds: s.elapsedSeconds ?? 0,
+    })),
+    runState.distanceMeters,
+    runState.elapsedSeconds,
+    runState.targetDistanceMeters,
+    runState.targetPaceSecondsPerKm
+  );
+
+  const motivationState = assessMotivation(
+    runState.splits,
+    runState.currentPaceSecondsPerKm,
+    runState.targetPaceSecondsPerKm,
+    runState.elapsedSeconds,
+    runState.targetDistanceMeters,
+    runState.distanceMeters
+  );
+
   const context: CoachingContext = {
     persona,
     trigger: {
@@ -63,7 +91,7 @@ export function buildCoachingContext(
       city: profile.city,
       experienceLevel: profile.experienceLevel,
       storyTopics: profile.storyTopics,
-      recentRunsSummary: '', // TODO: pull from run history
+      recentRunsSummary: '',
     },
     collective: {
       runnerCount: collective.runnerCount,
@@ -73,7 +101,19 @@ export function buildCoachingContext(
       })),
       averagePaceFormatted: formatPace(collective.averagePaceSecondsPerKm),
     },
+    paceAnalysis,
+    motivationState,
   };
+
+  // Attach story plan if available (from async Story Curator)
+  if (storyPlan && triggerType === 'idle_storytelling') {
+    context.storyPlan = storyPlan;
+  }
+
+  // Attach quality feedback if available
+  if (qualityFeedback) {
+    context.qualityFeedback = qualityFeedback;
+  }
 
   if (history && history.recentMessages.length > 0) {
     context.conversationHistory = history;
