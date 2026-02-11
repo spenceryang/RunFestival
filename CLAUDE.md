@@ -100,7 +100,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **`context-builder.ts`** — Assembles CoachingContext from run state + collective + coaching history
 - **`coach-client.ts`** — Streams Claude response, splits into sentences at `.!?` boundaries
 - **`prompts.ts`** — System prompts for 4 personas + 6 trigger prompts + voice configs
-- **`audio-manager.ts`** — Playback queue (max 2), interrupt support, sentence-level TTS streaming
+- **`audio-manager.ts`** — Playback queue (max 2), interrupt/pause/resume support, sentence-level TTS streaming
 - **`tts-client.ts`** — Calls `/api/tts`, returns ArrayBuffer per sentence
 - **`fallback-tts.ts`** — Browser SpeechSynthesis when ElevenLabs fails
 - **`voice-input.ts`** — Web Speech API wrapper for runner voice commands
@@ -117,7 +117,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **`/`** — Home. Auth-aware: shows profile link or login button.
 - **`/auth/login`** — Magic link login.
 - **`/profile`** — Profile setup/edit. Onboarding mode for new users.
-- **`/setup`** — Pre-run config. Pre-fills from user preferences.
+- **`/setup`** — Pre-run config. Pre-fills from user preferences. Pace slider covers 4:00-10:00/km with encouraging labels.
 - **`/run`** — Main run screen (GPS + coaching + agents + voice).
 - **`/recap`** — Post-run map, splits, AI narrative. Persists AI summary.
 - **`/dev`** — Password-gated dev mode entry (password: `claude`)
@@ -132,6 +132,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **Max queue: 2 messages**. Drop oldest if full. Don't let coaching pile up.
 - **45-second minimum** between coaching messages (enforced in trigger engine)
 - **User voice interrupts everything**: When the runner speaks, call `interrupt()` before enqueuing. Their response takes priority.
+- **Pause/resume preserves voice**: AudioManager has `pause()` and `resume()` methods that stop playback without destroying AudioContext. This prevents voice changes when a runner pauses and resumes. `interrupt()` clears queue, `destroy()` closes AudioContext, `pause()` preserves both.
 
 ### State
 - **All durations in seconds, distances in meters** internally. Convert only at display layer.
@@ -145,7 +146,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **Streaming responses**: `/api/coach` and `/api/tts` both stream. Don't buffer full responses.
 
 ### Testing
-- **197 tests** across 17 test files. All must pass before pushing.
+- **231 tests** across 19 test files. All must pass before pushing.
 - **Ask before deleting any tests.** User's explicit standing instruction.
 - Run: `npx vitest run`
 - Build: `npx next build`
@@ -226,3 +227,7 @@ OPENWEATHER_API_KEY        — Weather data (unused currently)
 3. **Repeated stories** (fixed in `cf3a844`): Every Claude call was stateless — no memory of previous messages. Added CoachingStore + PREVIOUS COACHING prompt section + cliffhanger continuation.
 
 4. **onComplete returned empty string** (fixed in `cf3a844`): `coach-client.ts` passed the sliced `fullText` remainder to `onComplete` instead of the full response. Added separate `collectedFullText` accumulator.
+
+5. **Voice changed on pause/resume**: The coaching `useEffect` in `run/page.tsx` had `store.status` in its dependency array. When status changed (`running` → `paused` → `running`), the effect destroyed and recreated AudioManager, closing the AudioContext. Mid-flight ElevenLabs requests would fail and fall back to browser SpeechSynthesis (different voice). Fixed by: (a) splitting the monolithic effect into 3 (redirect, coaching lifecycle mount-only, pause/resume audio), (b) adding `pause()`/`resume()` to AudioManager that stop playback without destroying AudioContext, (c) using callback refs to avoid stale closures in the mount-only interval.
+
+6. **Exclusionary pace labels**: Old PaceSelector had labels like "Easy" at 6:30/km and maxed at 6:30, alienating slower runners. Redesigned with inclusive labels ("Competitive" → "Easy Going"), extended range to 10:00/km, slider with visual bars, and "No target — just run" option. Goal: encourage everyone to run more.
