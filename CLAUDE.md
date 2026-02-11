@@ -1,160 +1,175 @@
 # CLAUDE.md — RunFestival
 
-## Project Overview
+## What This Is
 
-RunFestival is a Progressive Web App that turns solo runs into shared experiences with real-time AI voice coaching and live community presence. Built for the Claude Code Hackathon (Track: Amplify Human Judgment).
+RunFestival is a deployed PWA that provides real-time AI voice coaching during runs. Runners hear a personalized coach in their earbuds that reacts to their pace, tells stories, and connects them to a live community of other runners.
 
-**Core insight:** Strava is great after the run. RunFestival is great *during* the run.
+**Production:** https://runfestival.vercel.app
+**Repo:** https://github.com/spenceryang/RunFestival (private)
+**Auto-deploy:** Push to `main` → Vercel builds and deploys automatically.
 
 ## Tech Stack
 
-- **Framework:** Next.js 14+ (App Router, TypeScript)
-- **Styling:** Tailwind CSS
-- **State:** Zustand
-- **Backend:** Supabase (Auth, PostgreSQL, Realtime, Edge Functions, Storage)
-- **AI:** Claude API (Sonnet 4.5 for coaching, streaming)
-- **TTS:** ElevenLabs API (streaming text-to-speech)
-- **Maps:** Mapbox GL JS + Directions API
-- **Deploy:** Vercel
+| Layer | Tech | Notes |
+|-------|------|-------|
+| Framework | Next.js 14 (App Router, TypeScript) | Strict mode |
+| Styling | Tailwind CSS | `festival-*` color tokens |
+| State | Zustand (4 stores) | Client-side only, no persistence |
+| AI Coaching | Claude Sonnet 4.5 (streaming) | Via `/api/coach` edge route |
+| TTS | ElevenLabs `eleven_turbo_v2_5` | Via `/api/tts` edge route |
+| Voice Input | Web Speech API | Browser-native, no API key |
+| Maps | Mapbox GL JS | [lng, lat] order — Geolocation uses [lat, lng] |
+| Presence | Supabase Realtime | Ephemeral presence only, no DB tables |
+| GPS Backup | IndexedDB (idb-keyval) | Crash recovery, cleared on run finish |
+| Deploy | Vercel (edge runtime) | Auto-deploy on push to main |
 
-## Key Files
+## Architecture Overview
 
-- `docs/PRD.md` — Full product requirements
-- `docs/ARCHITECTURE.md` — System architecture, data flow, subsystems
-- `docs/PROMPTS.md` — All Claude system prompts for coaching personas
-
-## Build Priorities
-
-Build in this exact order. Each step should be independently testable.
-
-### Phase 1: Run Tracking (Day 1)
-1. Scaffold Next.js app with Tailwind, Zustand, Supabase client
-2. Implement GPS tracker (`src/lib/gps/tracker.ts`) using Geolocation API
-3. Build distance calculator (Haversine) and pace calculator (30s rolling avg)
-4. Create run state machine: IDLE → SETUP → RUNNING → PAUSED → FINISHED
-5. Build minimal Run Screen UI: big pace number, distance, time, start/stop buttons
-6. Add Wake Lock API to prevent screen sleep
-7. Store GPS points in IndexedDB as backup
-
-### Phase 2: Voice Pipeline (Day 2-3)
-1. Build coaching trigger engine (`src/lib/coach/trigger-engine.ts`)
-   - Split complete, pace drift, halfway, final push, idle
-2. Build context assembler that packages run state for Claude
-3. Create API route (`src/app/api/coach/route.ts`) that streams Claude responses
-4. Build ElevenLabs TTS client (`src/lib/audio/tts-client.ts`) with streaming
-5. Build audio manager with playback queue (Web Audio API)
-6. Wire up: trigger → context → Claude stream → TTS stream → audio play
-7. Add browser SpeechSynthesis fallback
-8. Implement coaching personas (system prompts in `docs/PROMPTS.md`)
-
-### Phase 3: Collective Presence (Day 4)
-1. Set up Supabase Realtime channel for runner presence
-2. Register/deregister runners on start/end
-3. Heartbeat updates every 30 seconds
-4. Live runner count component
-5. Milestone event broadcasting
-6. Feed collective data into coaching context
-7. Build synthetic runner seeder for demo
-
-### Phase 4: Routes & Polish (Day 5)
-1. Mapbox GL JS map integration
-2. Route generation (circular routes via Directions API)
-3. Elevation profiles
-4. Pre-run setup screen (distance, pace, persona)
-5. Post-run recap screen (map, splits, AI summary)
-
-### Phase 5: Demo Prep (Day 6-7)
-1. Demo mode with simulated GPS data (replay a real run at 10x speed)
-2. Polish UI — the run screen should feel like a premium product
-3. Record audio clips of coaching sessions for presentation
-4. Onboarding flow
-5. Bug fixes and edge cases
-
-## Code Conventions
-
-- TypeScript strict mode
-- Use `async/await` over `.then()` chains
-- Zustand stores in `src/lib/store/` — one per domain
-- API routes handle errors gracefully — never crash the run
-- All durations internally in seconds, distances in meters
-- Convert to user-preferred units (km/mi) only at display layer
-- GPS coordinates always [lat, lng] (not [lng, lat] — be careful with Mapbox which uses [lng, lat])
-- Audio errors should never surface to user — fall back silently
-
-## Critical Implementation Notes
-
-### GPS Tracking
-- Use `navigator.geolocation.watchPosition` with `enableHighAccuracy: true`
-- Filter points with `accuracy > 30` meters
-- Calculate pace with 30-second rolling window to smooth GPS jitter
-- Store raw GPS buffer in IndexedDB — sync to Supabase on run end
-- The Geolocation API uses [lat, lng] but Mapbox uses [lng, lat] — convert carefully
-
-### Voice Pipeline (MOST IMPORTANT)
-- Latency is everything. Target <5 seconds from trigger to first audio
-- Stream Claude response, send first complete sentence to TTS immediately
-- Stream TTS audio, start playback as soon as first chunk arrives
-- Never interrupt currently playing audio — queue next message
-- Max queue size: 2 messages (drop oldest if full)
-- Minimum interval between coaching messages: 45 seconds
-- The proxy endpoints (`/api/coach` and `/api/tts`) exist to keep API keys server-side
-
-### ElevenLabs Integration
-- Use `eleven_turbo_v2_5` model for lowest latency
-- Output format: `mp3_44100_64` (good balance of quality vs size)
-- Stream the response — don't wait for full audio
-- Voice IDs are in `docs/PROMPTS.md`
-- Free tier: 10,000 characters/month — cache common phrases if needed
-
-### Collective Presence
-- Use Supabase Realtime presence (not regular subscriptions)
-- Presence is ephemeral — automatically cleaned up on disconnect
-- Heartbeat every 30 seconds with updated distance/pace
-- For hackathon demo: seed 200-500 synthetic runners via edge function
-- Privacy: never share exact GPS coordinates, only city-level
-
-### Maps (Mapbox)
-- Use `mapbox-gl` npm package, NOT react-map-gl (too heavy for PWA)
-- Remember: Mapbox uses [lng, lat] order, Geolocation uses [lat, lng]
-- For route generation: create circular waypoints, request route through them
-- During run: update runner marker position every 3 seconds
-- After run: show route with pace heatmap (color-coded by speed)
-
-### PWA
-- Use `next-pwa` for service worker generation
-- Manifest needs: name, icons (192x192, 512x512), theme_color, display: standalone
-- The app MUST work with screen locked (Wake Lock API)
-- Audio playback must continue in background
-
-## Common Pitfalls
-
-1. **Don't use `setInterval` for GPS** — use `watchPosition` which fires on position change
-2. **Don't block on TTS** — stream it. Waiting for full audio kills the experience
-3. **Don't send coaching messages too frequently** — 45s minimum interval
-4. **Don't display raw GPS pace** — it's noisy. Always smooth it
-5. **Don't forget coordinate order** — Geolocation = [lat, lng], Mapbox = [lng, lat]
-6. **Don't make the coach talk during user's music** — provide a mute/pause option
-7. **Don't require internet for run tracking** — GPS + IndexedDB should work offline
-
-## Testing
-
-- Test GPS tracking by walking around (don't need to run)
-- Test voice pipeline with mock run data (static pace, simulated triggers)
-- Test collective with 2 browser tabs both starting runs
-- Demo mode: replay recorded GPS data at accelerated speed
-
-## Environment Setup
-
-```bash
-npm install
-cp .env.local.example .env.local
-# Fill in API keys
-npm run dev
+```
+GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
+                                    │
+                                    ▼ fires trigger
+                              Context Builder
+                           (run state + collective + coaching history)
+                                    │
+                                    ▼
+                              Audio Manager
+                           ┌────────┴────────┐
+                           │                  │
+                    POST /api/coach    POST /api/tts
+                    (Claude streaming)  (ElevenLabs per sentence)
+                           │                  │
+                           ▼                  ▼
+                    Sentence parser ──► Web Audio API playback
+                           │
+                           ▼
+                    CoachingStore (track what was said)
 ```
 
-Required API keys:
-- Supabase (URL + anon key + service role key)
-- Anthropic (Claude API key)
-- ElevenLabs (API key)
-- Mapbox (public token)
-- OpenWeather (API key)
+## File Map
+
+### Stores (`src/lib/store/`)
+- **`run-store.ts`** — GPS points, distance, pace, splits, persona, run status
+- **`coaching-store.ts`** — Last 8 coaching messages with summaries, topics, cliffhanger tracking
+- **`collective-store.ts`** — Live runner count, events, average pace
+- **`timeline-store.ts`** — Completed runs feed (all synthetic for now)
+
+### API Routes (`src/app/api/`)
+- **`coach/route.ts`** — Proxies to Claude API. Streams SSE. Dynamic max_tokens: 400 for storytelling/user-initiated, 150 for alerts. Injects conversation history into prompt.
+- **`tts/route.ts`** — Proxies to ElevenLabs. Streams MP3 audio. Uses persona-specific voice IDs.
+- **`recap/route.ts`** — Sends run stats to Claude for post-run narrative. Non-streaming, 200 tokens.
+
+### Voice Pipeline (`src/lib/coach/` + `src/lib/audio/`)
+- **`trigger-engine.ts`** — Evaluates triggers every 3s. Priority: split > pace_drift > halfway > final_push > idle_storytelling. Min 45s between messages.
+- **`context-builder.ts`** — Assembles CoachingContext from run state + collective + coaching history
+- **`coach-client.ts`** — Streams Claude response, splits into sentences at `.!?` boundaries
+- **`prompts.ts`** — System prompts for 4 personas + 6 trigger prompts + voice configs
+- **`audio-manager.ts`** — Playback queue (max 2), interrupt support, sentence-level TTS streaming
+- **`tts-client.ts`** — Calls `/api/tts`, returns ArrayBuffer per sentence
+- **`fallback-tts.ts`** — Browser SpeechSynthesis when ElevenLabs fails
+- **`voice-input.ts`** — Web Speech API wrapper for runner voice commands
+
+### GPS (`src/lib/gps/`)
+- **`tracker.ts`** — `watchPosition` with accuracy < 30m filter
+- **`distance.ts`** — Haversine formula
+- **`pace.ts`** — 30-second rolling window for current pace
+- **`storage.ts`** — IndexedDB backup every 10s
+- **`wake-lock.ts`** — Prevents screen sleep
+- **`demo-data.ts`** — Golden Gate Park 5K loop (350 points)
+
+### Pages (`src/app/`)
+- **`/setup`** — Pre-run config (distance, pace, persona)
+- **`/run`** — Main run screen (GPS + coaching + voice)
+- **`/recap`** — Post-run map, splits, AI narrative
+- **`/dev`** — Password-gated dev mode entry (password: `claude`)
+- **`/community`** — Live runner feed
+
+## Hard Rules — Do Not Break
+
+### Voice Pipeline
+- **Latency target: <5s** from trigger to first audio word
+- **Sentence-level streaming**: Send each sentence to TTS as soon as Claude finishes it — don't wait for the full response
+- **Audio errors are silent**: Never show TTS errors to the user. Fall back to browser SpeechSynthesis, then to silence. The run must never crash because of audio.
+- **Max queue: 2 messages**. Drop oldest if full. Don't let coaching pile up.
+- **45-second minimum** between coaching messages (enforced in trigger engine)
+- **User voice interrupts everything**: When the runner speaks, call `interrupt()` before enqueuing. Their response takes priority.
+
+### State
+- **All durations in seconds, distances in meters** internally. Convert only at display layer.
+- **GPS coordinates: [lat, lng]**. Mapbox uses [lng, lat]. Convert at the Mapbox boundary.
+- **Zustand stores are ephemeral** — lost on refresh. Only IndexedDB persists GPS/run state.
+- **CoachingStore resets on run end** — history is per-session only.
+
+### API Routes
+- **All 3 routes are edge runtime** — no Node.js APIs, no fs, no process (except env vars).
+- **API keys stay server-side** — never send Anthropic/ElevenLabs keys to the client. The `/api/*` routes exist specifically for this.
+- **Streaming responses**: `/api/coach` and `/api/tts` both stream. Don't buffer full responses.
+
+### Testing
+- **144 tests** across 11 test files. All must pass before pushing.
+- **Ask before deleting any tests.** User's explicit standing instruction.
+- Run: `npx vitest run`
+- Build: `npx next build`
+- Both must pass before any push to main.
+
+## Coaching System Details
+
+### 4 Personas
+| Persona | Style | ElevenLabs Voice | Speed |
+|---------|-------|-----------------|-------|
+| Hype | Energetic, exclamations, celebrates | `pNInz6obpgDQGcFmaJgB` | 1.1x |
+| Calm | Mindful, breathing focus, grounding | `EXAVITQu4vr4xnSDxMaL` | 0.9x |
+| Data | Analytical, stats-driven, strategic | `21m00Tcm4TlvDq8ikWAM` | 1.0x |
+| Storyteller | Narratives, cliffhangers, topic-based | `yoZ06aMxZJJ28mfd3POQ` | 0.95x |
+
+### 6 Trigger Types
+| Trigger | When | Token Limit |
+|---------|------|-------------|
+| `split_complete` | Runner completes 1km | 150 |
+| `pace_drift` | >15% off target for 60s | 150 |
+| `halfway` | Crosses 50% of target distance | 150 |
+| `final_push` | Enters last 10% of distance | 150 |
+| `idle_storytelling` | 3+ min without coaching | 400 |
+| `user_initiated` | Runner taps mic / speaks | 400 |
+
+### Conversation History
+- CoachingStore tracks last 8 messages with summaries + topics + cliffhanger flags
+- Injected into Claude prompt as `PREVIOUS COACHING` section
+- Prevents story repetition and enables multi-part story continuation
+- Helper functions (regex-based, zero latency): `summarizeMessage()`, `extractTopics()`, `detectCliffhanger()`
+
+## Known Limitations
+
+- **TTS is not truly streaming**: `tts-client.ts` calls `response.arrayBuffer()` which buffers the full audio per sentence before playback. True chunk-level streaming would reduce latency further but requires Web Audio API chunk decoding.
+- **No user accounts / auth**: No login, no persistent run history. Everything is session-scoped.
+- **No offline coaching**: Claude + ElevenLabs require internet. GPS tracking works offline (IndexedDB), but coaching goes silent.
+- **Supabase presence only**: No database tables, no stored data. If Supabase is down, app uses synthetic runner data.
+- **Profile data is hardcoded**: Runner name, city, story topics are hardcoded in `run/page.tsx`. No profile settings UI yet.
+
+## Dev / Demo Modes
+
+- **Dev mode**: `/dev` → enter password `claude` → `/run?dev=true`. Runs SF Marathon 2026 route simulation at configurable speed (10x-50x). Full coaching pipeline active.
+- **Demo mode**: `/run?demo=true`. Replays Golden Gate Park 5K at 10x speed. Good for quick tests.
+- Both modes generate 200+ synthetic runners for collective presence.
+
+## Environment Variables
+
+```
+ANTHROPIC_API_KEY          — Claude API (server-side only)
+ELEVENLABS_API_KEY         — ElevenLabs TTS (server-side only)
+NEXT_PUBLIC_MAPBOX_TOKEN   — Mapbox GL JS (client-side)
+NEXT_PUBLIC_SUPABASE_URL   — Supabase project URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY — Supabase anon key
+SUPABASE_SERVICE_ROLE_KEY  — Supabase admin (server-side only)
+OPENWEATHER_API_KEY        — Weather data (unused currently)
+```
+
+## Past Bugs & Fixes (Learn From These)
+
+1. **Overlapping audio** (fixed in `c1ee8b9`): `processQueue` in AudioManager had a race condition — `onComplete` could start a second concurrent sentence-processing loop. Fixed with `isProcessing` lock + `interrupted` flag + `interrupt()` method.
+
+2. **Short stories** (fixed in `8cbb0a4`): `max_tokens: 150` was hardcoded for all triggers. Stories need 400 tokens. Made dynamic based on trigger type.
+
+3. **Repeated stories** (fixed in `cf3a844`): Every Claude call was stateless — no memory of previous messages. Added CoachingStore + PREVIOUS COACHING prompt section + cliffhanger continuation.
+
+4. **onComplete returned empty string** (fixed in `cf3a844`): `coach-client.ts` passed the sliced `fullText` remainder to `onComplete` instead of the full response. Added separate `collectedFullText` accumulator.
