@@ -43,6 +43,7 @@ function RunPage() {
   const prevSnapshotRef = useRef<typeof store | null>(null);
   const triggerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isListening, setIsListening] = useState(false);
+  const [isCoaching, setIsCoaching] = useState(false);
   const userProfile = useUserStore((s) => s.user);
 
   const getUserProfileForCoaching = useCallback(() => {
@@ -157,6 +158,7 @@ function RunPage() {
 
     triggerEngineRef.current = new CoachingTriggerEngine();
     audioManagerRef.current = new AudioManager();
+    audioManagerRef.current.onActiveChange(setIsCoaching);
     voiceInputRef.current = new VoiceInput();
 
     // Evaluate triggers every 3 seconds
@@ -336,6 +338,7 @@ function RunPage() {
         onFinish={handleFinish}
         onTalkToCoach={handleTalkToCoach}
         isListening={isListening}
+        isCoaching={isCoaching}
       />
     );
   }
@@ -346,6 +349,7 @@ function RunPage() {
         onFinish={handleFinish}
         onTalkToCoach={handleTalkToCoach}
         isListening={isListening}
+        isCoaching={isCoaching}
       />
     );
   }
@@ -355,6 +359,7 @@ function RunPage() {
       onFinish={handleFinish}
       onTalkToCoach={handleTalkToCoach}
       isListening={isListening}
+      isCoaching={isCoaching}
     />
   );
 }

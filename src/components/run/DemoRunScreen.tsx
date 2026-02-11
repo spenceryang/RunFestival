@@ -9,14 +9,16 @@ import { formatPace, formatTime, formatDistance } from '@/lib/gps/pace';
 import { PaceDisplay } from './PaceDisplay';
 import { RunControls } from './RunControls';
 import { CollectiveBanner } from './CollectiveBanner';
+import { CoachingIndicator } from './CoachingIndicator';
 
 interface DemoRunScreenProps {
   onFinish: () => void;
   onTalkToCoach: () => void;
   isListening?: boolean;
+  isCoaching?: boolean;
 }
 
-export function DemoRunScreen({ onFinish, onTalkToCoach, isListening = false }: DemoRunScreenProps) {
+export function DemoRunScreen({ onFinish, onTalkToCoach, isListening = false, isCoaching = false }: DemoRunScreenProps) {
   const store = useRunStore();
   const trackerRef = useRef<DemoGpsTracker | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -180,6 +182,9 @@ export function DemoRunScreen({ onFinish, onTalkToCoach, isListening = false }: 
         {/* Recent collective events */}
         <RecentEvents />
       </div>
+
+      {/* Coach activity indicator */}
+      <CoachingIndicator isActive={isCoaching} />
 
       {/* Controls */}
       <div className="px-6 pb-8">

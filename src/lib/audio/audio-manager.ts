@@ -21,6 +21,7 @@ export class AudioManager {
   private interrupted = false;
   private isPaused = false;
   private visibilityHandler: (() => void) | null = null;
+  private activeChangeCallback: ((active: boolean) => void) | null = null;
 
   constructor() {
     // Pause TTS when app goes to background to prevent background API usage
@@ -71,6 +72,7 @@ export class AudioManager {
     }
 
     this.isPlaying = false;
+    this.notifyActiveChange(false);
   }
 
   /**
@@ -96,6 +98,7 @@ export class AudioManager {
     }
 
     this.isPlaying = false;
+    this.notifyActiveChange(false);
   }
 
   /**
@@ -113,6 +116,26 @@ export class AudioManager {
 
   get paused(): boolean {
     return this.isPaused;
+  }
+
+  get playing(): boolean {
+    return this.isPlaying;
+  }
+
+  /**
+   * Register a callback that fires when the audio manager starts or stops
+   * actively processing coaching messages. Used for UI indicators.
+   */
+  onActiveChange(callback: ((active: boolean) => void) | null): void {
+    this.activeChangeCallback = callback;
+  }
+
+  private notifyActiveChange(active: boolean): void {
+    try {
+      this.activeChangeCallback?.(active);
+    } catch {
+      // UI callback error — never crash audio pipeline
+    }
   }
 
   async enqueue(
@@ -140,10 +163,14 @@ export class AudioManager {
     const next = this.queue.shift();
     if (!next) {
       this.isPlaying = false;
+      this.notifyActiveChange(false);
       return;
     }
 
-    this.isPlaying = true;
+    if (!this.isPlaying) {
+      this.isPlaying = true;
+      this.notifyActiveChange(true);
+    }
     const voiceConfig = PERSONA_VOICE_CONFIG[next.context.persona];
 
     try {

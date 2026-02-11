@@ -231,3 +231,35 @@ OPENWEATHER_API_KEY        — Weather data (unused currently)
 5. **Voice changed on pause/resume**: The coaching `useEffect` in `run/page.tsx` had `store.status` in its dependency array. When status changed (`running` → `paused` → `running`), the effect destroyed and recreated AudioManager, closing the AudioContext. Mid-flight ElevenLabs requests would fail and fall back to browser SpeechSynthesis (different voice). Fixed by: (a) splitting the monolithic effect into 3 (redirect, coaching lifecycle mount-only, pause/resume audio), (b) adding `pause()`/`resume()` to AudioManager that stop playback without destroying AudioContext, (c) using callback refs to avoid stale closures in the mount-only interval.
 
 6. **Exclusionary pace labels**: Old PaceSelector had labels like "Easy" at 6:30/km and maxed at 6:30, alienating slower runners. Redesigned with inclusive labels ("Competitive" → "Easy Going"), extended range to 10:00/km, slider with visual bars, and "No target — just run" option. Goal: encourage everyone to run more.
+
+## Definition of Done (Engineering Standards)
+
+Every feature implementation must complete ALL of the following before being considered done:
+
+### Code Quality
+1. **All existing tests pass** — Run `npx vitest run` (currently 231+ tests across 19+ files)
+2. **Clean build** — Run `npx next build` with zero errors and zero warnings
+3. **No regressions** — Verify the change doesn't break existing functionality
+4. **Ask before deleting tests** — User's explicit standing instruction
+
+### Documentation
+5. **Update CLAUDE.md** — If the change adds new files, patterns, hard rules, or bug fixes
+6. **Update docs/AGENTS.md** — If the change affects agent architecture, data flow, or storage
+7. **Update test count** — Keep the test count in CLAUDE.md accurate after adding/removing tests
+
+### New Tests
+8. **Write tests for new logic** — Any new utility, store method, agent, or complex component
+9. **Edge cases covered** — Test error paths, boundary conditions, and state transitions
+10. **Mocks are realistic** — Mock external APIs (AudioContext, speechSynthesis, fetch) at the boundary
+
+### UX Standards
+11. **Mobile-first** — All interactions work with touch (pointer events, not just click)
+12. **Destructive actions require confirmation** — Stop/delete/reset must confirm before executing
+13. **Visual state feedback** — Paused, loading, error, and active states must be visually distinct
+14. **Inclusive language** — No judgmental labels (avoid "easy", "slow", "beginner" in user-facing text)
+15. **Silent error handling** — Audio/TTS errors never crash the app or show raw errors to users
+
+### Git Discipline
+16. **Commit messages explain why** — Not just what changed
+17. **Atomic commits** — One logical change per commit
+18. **Never push broken builds** — Tests + build must pass before `git push`

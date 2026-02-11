@@ -10,6 +10,7 @@ import { formatPace, formatTime, formatDistance } from '@/lib/gps/pace';
 import { PaceDisplay } from './PaceDisplay';
 import { RunControls } from './RunControls';
 import { CollectiveBanner } from './CollectiveBanner';
+import { CoachingIndicator } from './CoachingIndicator';
 import { ApiUsagePanel } from '@/components/dev/ApiUsagePanel';
 
 const SPEED_OPTIONS = [5, 10, 20, 50] as const;
@@ -18,9 +19,10 @@ interface DevRunScreenProps {
   onFinish: () => void;
   onTalkToCoach: () => void;
   isListening?: boolean;
+  isCoaching?: boolean;
 }
 
-export function DevRunScreen({ onFinish, onTalkToCoach, isListening = false }: DevRunScreenProps) {
+export function DevRunScreen({ onFinish, onTalkToCoach, isListening = false, isCoaching = false }: DevRunScreenProps) {
   const store = useRunStore();
   const trackerRef = useRef<DevGpsTracker | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -299,6 +301,9 @@ export function DevRunScreen({ onFinish, onTalkToCoach, isListening = false }: D
           </div>
         </div>
       </div>
+
+      {/* Coach activity indicator */}
+      <CoachingIndicator isActive={isCoaching} />
 
       {/* Controls */}
       <div className="px-6 pb-8">

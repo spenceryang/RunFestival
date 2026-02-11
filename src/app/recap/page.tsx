@@ -9,7 +9,8 @@ import { RecapStats } from '@/components/recap/RecapStats';
 import { SplitsTable } from '@/components/recap/SplitsTable';
 import { RecapNarrative } from '@/components/recap/RecapNarrative';
 import { RecapMap } from '@/components/recap/RecapMap';
-import { Home, Share2, Zap } from 'lucide-react';
+import { Home, Share2, Trophy } from 'lucide-react';
+import { formatDistance } from '@/lib/gps/pace';
 
 export default function RecapPage() {
   const router = useRouter();
@@ -30,23 +31,19 @@ export default function RecapPage() {
 
   return (
     <div className="min-h-screen bg-festival-darker px-6 py-8">
-      {/* Header */}
-      <div className="text-center mb-8">
-        <Zap className="w-10 h-10 text-festival-orange mx-auto mb-2" />
-        <h1 className="text-3xl font-bold text-white mb-1">Run Complete!</h1>
-        <p className="text-festival-muted">Great effort out there</p>
+      {/* Celebration header — the emotional payoff */}
+      <div className="text-center mb-6">
+        <div className="w-16 h-16 rounded-full bg-festival-orange/10 border-2 border-festival-orange
+                        flex items-center justify-center mx-auto mb-3">
+          <Trophy className="w-8 h-8 text-festival-orange" />
+        </div>
+        <h1 className="text-3xl font-bold text-white mb-1">You did it!</h1>
+        <p className="text-lg text-festival-orange font-medium">
+          {formatDistance(store.distanceMeters, store.distanceUnit)} {store.distanceUnit} complete
+        </p>
       </div>
 
-      {/* Map */}
-      <div className="mb-6">
-        <RecapMap
-          gpsPoints={store.gpsPoints}
-          splits={store.splits}
-          averagePaceSecondsPerKm={store.averagePaceSecondsPerKm}
-        />
-      </div>
-
-      {/* Stats */}
+      {/* Stats first — the achievement */}
       <div className="space-y-4 mb-6">
         <RecapStats
           distanceMeters={store.distanceMeters}
@@ -56,6 +53,19 @@ export default function RecapPage() {
           unit={store.distanceUnit}
         />
       </div>
+
+      {/* Collective — social connection */}
+      {collective.runnerCount > 0 && (
+        <div className="card mb-6 text-center">
+          <p className="text-festival-muted text-sm">
+            You ran with{' '}
+            <span className="text-white font-semibold">
+              {collective.runnerCount.toLocaleString()}
+            </span>{' '}
+            other people today
+          </p>
+        </div>
+      )}
 
       {/* AI Recap Narrative */}
       <div className="mb-6">
@@ -72,7 +82,16 @@ export default function RecapPage() {
         />
       </div>
 
-      {/* Splits */}
+      {/* Map — route visualization */}
+      <div className="mb-6">
+        <RecapMap
+          gpsPoints={store.gpsPoints}
+          splits={store.splits}
+          averagePaceSecondsPerKm={store.averagePaceSecondsPerKm}
+        />
+      </div>
+
+      {/* Splits — detailed data */}
       <div className="mb-6">
         <SplitsTable
           splits={store.splits}
@@ -80,19 +99,6 @@ export default function RecapPage() {
           unit={store.distanceUnit}
         />
       </div>
-
-      {/* Collective */}
-      {collective.runnerCount > 0 && (
-        <div className="card mb-6 text-center">
-          <p className="text-festival-muted text-sm">
-            You ran with{' '}
-            <span className="text-white font-semibold">
-              {collective.runnerCount.toLocaleString()}
-            </span>{' '}
-            other people today
-          </p>
-        </div>
-      )}
 
       {/* Actions */}
       <div className="flex gap-3">

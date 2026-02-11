@@ -9,6 +9,7 @@ import { formatPace, formatTime, formatDistance } from '@/lib/gps/pace';
 import { PaceDisplay } from './PaceDisplay';
 import { RunControls } from './RunControls';
 import { CollectiveBanner } from './CollectiveBanner';
+import { CoachingIndicator } from './CoachingIndicator';
 import { useCollectiveStore } from '@/lib/store/collective-store';
 import { useCoachingStore } from '@/lib/store/coaching-store';
 import { completeRunRecord } from '@/lib/services/run-persistence';
@@ -18,9 +19,10 @@ interface RunScreenProps {
   onFinish: () => void;
   onTalkToCoach: () => void;
   isListening?: boolean;
+  isCoaching?: boolean;
 }
 
-export function RunScreen({ onFinish, onTalkToCoach, isListening = false }: RunScreenProps) {
+export function RunScreen({ onFinish, onTalkToCoach, isListening = false, isCoaching = false }: RunScreenProps) {
   const store = useRunStore();
   const trackerRef = useRef<GpsTracker | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -236,6 +238,9 @@ export function RunScreen({ onFinish, onTalkToCoach, isListening = false }: RunS
           </div>
         )}
       </div>
+
+      {/* Coach activity indicator */}
+      <CoachingIndicator isActive={isCoaching} />
 
       {/* Controls */}
       <div className="pb-safe px-6 pb-8">
