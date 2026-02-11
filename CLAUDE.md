@@ -147,7 +147,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **Streaming responses**: `/api/coach` and `/api/tts` both stream. Don't buffer full responses.
 
 ### Testing
-- **238 tests** across 20 test files. All must pass before pushing.
+- **247 tests** across 22 test files. All must pass before pushing.
 - **Ask before deleting any tests.** User's explicit standing instruction.
 - Run: `npx vitest run`
 - Build: `npx next build`

@@ -6,7 +6,7 @@ Tracking document for known bugs, fixes in progress, and verification status.
 
 ### BUG-001: Community feed shows only hardcoded synthetic data
 - **Severity:** High
-- **Status:** In Progress
+- **Status:** Fixed
 - **Reported:** 2026-02-11
 - **Description:** The community run feed at `/community` generates 25 fake runs on mount via `generateTimelineRuns()` and injects a new fake run every 15 seconds. The user's own completed run never appears. The runner count defaults to a hardcoded `342` when no live data exists.
 - **Root Cause:** `CommunityTimeline.tsx` seeds the timeline store entirely with synthetic data from `src/lib/collective/timeline.ts`. No code path fetches real completed runs from the `runs` table in Supabase. The recap page (`/recap`) persists the run to the DB but never adds it to the timeline store.
@@ -26,7 +26,7 @@ Tracking document for known bugs, fixes in progress, and verification status.
 
 ### BUG-002: Non-logged-in users cannot appear in community feed
 - **Severity:** Medium
-- **Status:** In Progress
+- **Status:** Fixed
 - **Reported:** 2026-02-11
 - **Description:** If a user is not logged in, they have no display name. Their run cannot be attributed to anyone in the community feed. There's no mechanism to set a guest name.
 - **Root Cause:** The app ties identity entirely to Supabase auth. The `runs` table requires a `user_id` foreign key. Unauthenticated users in demo mode bypass auth but have no profile.
@@ -45,7 +45,7 @@ Tracking document for known bugs, fixes in progress, and verification status.
 
 ### BUG-003: Magic link authentication fails in Safari PWA (standalone mode)
 - **Severity:** Critical
-- **Status:** In Progress
+- **Status:** Fixed
 - **Reported:** 2026-02-11
 - **Description:** When the app is installed as a PWA on iOS Safari and the user requests a magic link, tapping the link in the email opens Safari browser (not the PWA). The session cookies are set in Safari's cookie jar, which is isolated from the PWA's cookie jar. The user remains logged out in the PWA.
 - **Root Cause:** iOS Safari runs standalone PWAs in a separate security context with its own cookie storage. Magic link redirects open in Safari browser, not the PWA. Supabase session cookies set in the browser context are invisible to the PWA context. There is no bridge mechanism.
@@ -83,7 +83,7 @@ See CLAUDE.md "Past Bugs & Fixes" section for previously resolved issues:
 
 ## Test Coverage Notes
 
-- Current: 238 tests across 20 test files
+- Current: 247 tests across 22 test files
 - Timeline tests: `src/__tests__/timeline.test.ts` (covers synthetic generation + store)
 - Auth tests: `src/__tests__/get-site-url.test.ts` (covers `getSiteUrl()` env priority)
 - No tests for Safari PWA context, cookie isolation, or standalone mode detection

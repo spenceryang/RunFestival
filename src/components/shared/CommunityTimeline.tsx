@@ -78,7 +78,7 @@ interface CommunityTimelineProps {
 }
 
 export function CommunityTimeline({ className = '' }: CommunityTimelineProps) {
-  const { runs, isLoading, setRuns, setLoading, addRun } = useTimelineStore();
+  const { runs, isLoading, setRuns, setLoading } = useTimelineStore();
   const isAuthenticated = useUserStore((s) => s.isAuthenticated);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
 

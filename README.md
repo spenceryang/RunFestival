@@ -134,7 +134,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 npm run dev          # Development server
 npm run build        # Production build
 npm run start        # Production server
-npm run test         # Run all tests (238 tests)
+npm run test         # Run all tests (247 tests)
 npm run test:watch   # Watch mode
 ```
 
