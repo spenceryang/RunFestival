@@ -1,10 +1,13 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRunStore } from '@/lib/store/run-store';
 import { useCollectiveStore } from '@/lib/store/collective-store';
+import { useTimelineStore } from '@/lib/store/timeline-store';
+import { useUserStore } from '@/lib/store/user-store';
 import { updateRunAiSummary } from '@/lib/services/run-persistence';
+import { getGuestName } from '@/lib/guest-name';
 import { RecapStats } from '@/components/recap/RecapStats';
 import { SplitsTable } from '@/components/recap/SplitsTable';
 import { RecapNarrative } from '@/components/recap/RecapNarrative';
@@ -16,6 +19,30 @@ export default function RecapPage() {
   const router = useRouter();
   const store = useRunStore();
   const collective = useCollectiveStore();
+  const addTimelineRun = useTimelineStore((s) => s.addRun);
+  const user = useUserStore((s) => s.user);
+  const addedToTimeline = useRef(false);
+
+  // Add the completed run to the community timeline store
+  useEffect(() => {
+    if (addedToTimeline.current) return;
+    if (store.distanceMeters <= 0 || store.elapsedSeconds <= 0) return;
+
+    const displayName = user?.name ?? getGuestName() ?? 'Runner';
+    addTimelineRun({
+      id: store.runId ?? `local-${Date.now()}`,
+      userId: user?.id ?? 'guest',
+      displayName,
+      city: user?.city ?? '',
+      distanceMeters: store.distanceMeters,
+      elapsedSeconds: store.elapsedSeconds,
+      averagePaceSecondsPerKm: store.averagePaceSecondsPerKm,
+      persona: store.persona,
+      completedAt: Date.now(),
+      isSynthetic: false,
+    });
+    addedToTimeline.current = true;
+  }, [store.distanceMeters, store.elapsedSeconds, store.averagePaceSecondsPerKm, store.persona, store.runId, user, addTimelineRun]);
 
   const handleDone = () => {
     store.resetRun();

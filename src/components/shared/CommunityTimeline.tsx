@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { MapPin, Clock, Route, Flame, Wind, BarChart3, BookOpen } from 'lucide-react';
 import { useTimelineStore, type TimelineRun } from '@/lib/store/timeline-store';
-import { generateTimelineRuns, formatTimeAgo } from '@/lib/collective/timeline';
+import { formatTimeAgo } from '@/lib/collective/timeline';
 import { formatPace, formatDistance, formatTime } from '@/lib/gps/pace';
+import { GuestNamePrompt } from '@/components/shared/GuestNamePrompt';
+import { useUserStore } from '@/lib/store/user-store';
+import { getGuestName } from '@/lib/guest-name';
 
 const PERSONA_ICONS = {
   hype: Flame,
@@ -38,10 +41,12 @@ function RunCard({ run }: { run: TimelineRun }) {
           <span className="font-semibold text-white text-sm truncate">
             {run.displayName}
           </span>
-          <span className="flex items-center gap-1 text-xs text-festival-muted flex-shrink-0">
-            <MapPin className="w-3 h-3" />
-            {run.city}
-          </span>
+          {run.city && (
+            <span className="flex items-center gap-1 text-xs text-festival-muted flex-shrink-0">
+              <MapPin className="w-3 h-3" />
+              {run.city}
+            </span>
+          )}
         </div>
 
         {/* Stats row */}
@@ -74,35 +79,78 @@ interface CommunityTimelineProps {
 
 export function CommunityTimeline({ className = '' }: CommunityTimelineProps) {
   const { runs, isLoading, setRuns, setLoading, addRun } = useTimelineStore();
+  const isAuthenticated = useUserStore((s) => s.isAuthenticated);
+  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
 
-  // Seed timeline with synthetic runs on mount
+  // Check if unauthenticated user needs to set a guest name
   useEffect(() => {
-    if (runs.length === 0) {
-      setLoading(true);
-      // Simulate a brief load
-      const timer = setTimeout(() => {
-        setRuns(generateTimelineRuns(25));
-        setLoading(false);
-      }, 500);
-      return () => clearTimeout(timer);
+    if (!isAuthenticated && !getGuestName()) {
+      setShowGuestPrompt(true);
     }
-  }, [runs.length, setRuns, setLoading]);
+  }, [isAuthenticated]);
 
-  // Periodically add new "live" runs
+  // Fetch real completed runs from API on mount
   useEffect(() => {
-    const interval = setInterval(() => {
-      const newRuns = generateTimelineRuns(1);
-      if (newRuns[0]) {
-        newRuns[0].completedAt = Date.now(); // just now
-        addRun(newRuns[0]);
+    let cancelled = false;
+
+    async function fetchRuns() {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/community-runs');
+        if (!res.ok) throw new Error('fetch failed');
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data.runs)) {
+          // Merge with any locally-added runs (e.g. user's own run)
+          const dbRunIds = new Set(data.runs.map((r: TimelineRun) => r.id));
+          const localOnly = runs.filter((r) => !dbRunIds.has(r.id));
+          const merged = [...localOnly, ...data.runs].sort(
+            (a, b) => b.completedAt - a.completedAt
+          );
+          setRuns(merged);
+        }
+      } catch {
+        // API unavailable — keep any existing local runs
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    }, 15_000); // New run every 15 seconds
+    }
+
+    fetchRuns();
+    return () => { cancelled = true; };
+    // Only fetch on mount — don't re-fetch when runs change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setRuns, setLoading]);
+
+  // Refresh from API every 60 seconds
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/community-runs');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data.runs) && data.runs.length > 0) {
+          const dbRunIds = new Set(data.runs.map((r: TimelineRun) => r.id));
+          const currentRuns = useTimelineStore.getState().runs;
+          const localOnly = currentRuns.filter((r) => !dbRunIds.has(r.id));
+          const merged = [...localOnly, ...data.runs].sort(
+            (a, b) => b.completedAt - a.completedAt
+          );
+          setRuns(merged);
+        }
+      } catch {
+        // Silent — keep current data
+      }
+    }, 60_000);
 
     return () => clearInterval(interval);
-  }, [addRun]);
+  }, [setRuns]);
 
   return (
     <div className={className}>
+      {showGuestPrompt && (
+        <GuestNamePrompt onDone={() => setShowGuestPrompt(false)} />
+      )}
+
       <h2 className="stat-label mb-4 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
         Community Runs
@@ -116,6 +164,12 @@ export function CommunityTimeline({ className = '' }: CommunityTimelineProps) {
               className="card animate-pulse h-20"
             />
           ))}
+        </div>
+      ) : runs.length === 0 ? (
+        <div className="card text-center py-8">
+          <p className="text-festival-muted text-sm">
+            No runs yet. Be the first to complete a run!
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
