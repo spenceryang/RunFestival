@@ -8,6 +8,7 @@ const MAX_QUEUE_SIZE = 2;
 
 interface QueuedMessage {
   context: CoachingContext;
+  onMessageComplete?: (fullText: string) => void;
 }
 
 export class AudioManager {
@@ -55,7 +56,10 @@ export class AudioManager {
     this.isPlaying = false;
   }
 
-  async enqueue(context: CoachingContext): Promise<void> {
+  async enqueue(
+    context: CoachingContext,
+    onMessageComplete?: (fullText: string) => void
+  ): Promise<void> {
     if (this.isMuted) return;
 
     // Reset interrupted flag on new enqueue
@@ -64,7 +68,7 @@ export class AudioManager {
     if (this.queue.length >= MAX_QUEUE_SIZE) {
       this.queue.shift(); // Drop oldest
     }
-    this.queue.push({ context });
+    this.queue.push({ context, onMessageComplete });
 
     if (!this.isPlaying) {
       await this.processNext();
@@ -84,7 +88,7 @@ export class AudioManager {
     const voiceConfig = PERSONA_VOICE_CONFIG[next.context.persona];
 
     try {
-      await this.processCoachingRequest(next.context, voiceConfig);
+      await this.processCoachingRequest(next.context, voiceConfig, next.onMessageComplete);
     } catch {
       // Audio error — fall back silently per CLAUDE.md
     }
@@ -97,7 +101,8 @@ export class AudioManager {
 
   private async processCoachingRequest(
     context: CoachingContext,
-    voiceConfig: PersonaVoiceConfig
+    voiceConfig: PersonaVoiceConfig,
+    onMessageComplete?: (fullText: string) => void
   ): Promise<void> {
     return new Promise<void>((resolve) => {
       const sentences: string[] = [];
@@ -150,8 +155,11 @@ export class AudioManager {
             processQueue();
           }
         },
-        () => {
+        (fullText) => {
           isStreamDone = true;
+          if (onMessageComplete && fullText) {
+            try { onMessageComplete(fullText); } catch { /* ignore */ }
+          }
           // If all sentences already processed, resolve
           if (sentenceIndex >= sentences.length || this.interrupted) {
             resolve();

@@ -51,7 +51,7 @@ ${context.collective.recentEvents.length > 0 ? `- Recent: ${context.collective.r
 RUNNER PROFILE:
 - Name: ${context.profile.name}
 ${context.profile.storyTopics.length > 0 ? `- Story topics: ${context.profile.storyTopics.join(', ')}` : ''}
-
+${buildHistorySection(context)}
 ${JSON.stringify(context.trigger.data)}`;
 
   try {
@@ -109,4 +109,25 @@ function formatTimeInline(totalSeconds: number): string {
   const mins = Math.floor(totalSeconds / 60);
   const secs = Math.floor(totalSeconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function buildHistorySection(context: CoachingContext): string {
+  const h = context.conversationHistory;
+  if (!h || h.recentMessages.length === 0) return '';
+
+  const lines = ['\nPREVIOUS COACHING (do NOT repeat these topics or stories):'];
+  h.recentMessages.forEach((m, i) => {
+    const topicStr = m.topics.length > 0 ? ` (topics: ${m.topics.join(', ')})` : '';
+    lines.push(`${i + 1}. [${m.triggerType}] ${m.summary}${topicStr}`);
+  });
+
+  if (h.topicsCovered.length > 0) {
+    lines.push(`\nTopics already covered this run: ${h.topicsCovered.join(', ')}`);
+  }
+
+  if (h.lastCliffhanger) {
+    lines.push(`\nYou left off with a cliffhanger: "${h.lastCliffhanger}" — CONTINUE this story if the trigger is idle_storytelling.`);
+  }
+
+  return lines.join('\n');
 }

@@ -11,6 +11,13 @@ import { CoachingTriggerEngine } from '@/lib/coach/trigger-engine';
 import { buildCoachingContext } from '@/lib/coach/context-builder';
 import { AudioManager } from '@/lib/audio/audio-manager';
 import { VoiceInput } from '@/lib/audio/voice-input';
+import {
+  useCoachingStore,
+  summarizeMessage,
+  extractTopics,
+  detectCliffhanger,
+} from '@/lib/store/coaching-store';
+import type { CoachingHistory } from '@/lib/coach/context-builder';
 
 export default function RunPageWrapper() {
   return (
@@ -32,6 +39,36 @@ function RunPage() {
   const prevSnapshotRef = useRef<typeof store | null>(null);
   const triggerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isListening, setIsListening] = useState(false);
+
+  const getCoachingHistory = useCallback((): CoachingHistory => {
+    const store = useCoachingStore.getState();
+    return {
+      recentMessages: store.getRecentHistory(5).map((m) => ({
+        triggerType: m.triggerType,
+        summary: m.summary,
+        topics: m.topics,
+      })),
+      topicsCovered: store.getTopicsCovered(),
+      lastCliffhanger: store.getLastCliffhanger(),
+    };
+  }, []);
+
+  const buildOnComplete = useCallback(
+    (triggerType: string, userMessage?: string) => {
+      return (fullText: string) => {
+        useCoachingStore.getState().addMessage({
+          triggerType: triggerType as import('@/types/coach').TriggerType,
+          text: fullText,
+          summary: summarizeMessage(fullText),
+          topics: extractTopics(fullText),
+          hasCliffhanger: detectCliffhanger(fullText),
+          userMessage,
+          timestamp: Date.now(),
+        });
+      };
+    },
+    []
+  );
 
   // Initialize coaching systems
   useEffect(() => {
@@ -102,9 +139,10 @@ function RunPage() {
             experienceLevel: 'intermediate',
             storyTopics: ['history', 'science'],
           },
-          collectiveState
+          collectiveState,
+          getCoachingHistory()
         );
-        audioManagerRef.current?.enqueue(context);
+        audioManagerRef.current?.enqueue(context, buildOnComplete(trigger.type));
       }
     }, 3000);
 
@@ -113,8 +151,9 @@ function RunPage() {
       triggerEngineRef.current?.reset();
       audioManagerRef.current?.destroy();
       voiceInputRef.current?.destroy();
+      useCoachingStore.getState().reset();
     };
-  }, [store.status, router]);
+  }, [store.status, router, getCoachingHistory, buildOnComplete]);
 
   const handleFinish = useCallback(() => {
     router.push('/recap');
@@ -157,7 +196,8 @@ function RunPage() {
         experienceLevel: 'intermediate',
         storyTopics: ['history', 'science'],
       },
-      collectiveState
+      collectiveState,
+      getCoachingHistory()
     );
 
     // Attach the runner's spoken message if provided
@@ -167,8 +207,8 @@ function RunPage() {
       audioManagerRef.current.interrupt();
     }
 
-    audioManagerRef.current.enqueue(context);
-  }, []);
+    audioManagerRef.current.enqueue(context, buildOnComplete(trigger.type, userMessage));
+  }, [getCoachingHistory, buildOnComplete]);
 
   const handleTalkToCoach = useCallback(() => {
     // If already listening, stop and fall back to regular coach trigger

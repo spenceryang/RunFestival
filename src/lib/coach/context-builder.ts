@@ -21,14 +21,25 @@ interface UserProfile {
   storyTopics: string[];
 }
 
+export interface CoachingHistory {
+  recentMessages: Array<{
+    triggerType: TriggerType;
+    summary: string;
+    topics: string[];
+  }>;
+  topicsCovered: string[];
+  lastCliffhanger: string | null;
+}
+
 export function buildCoachingContext(
   persona: CoachingPersona,
   triggerType: TriggerType,
   runState: RunSnapshot,
   profile: UserProfile,
-  collective: CollectiveState
+  collective: CollectiveState,
+  history?: CoachingHistory
 ): CoachingContext {
-  return {
+  const context: CoachingContext = {
     persona,
     trigger: {
       type: triggerType,
@@ -63,6 +74,12 @@ export function buildCoachingContext(
       averagePaceFormatted: formatPace(collective.averagePaceSecondsPerKm),
     },
   };
+
+  if (history && history.recentMessages.length > 0) {
+    context.conversationHistory = history;
+  }
+
+  return context;
 }
 
 function buildTriggerData(

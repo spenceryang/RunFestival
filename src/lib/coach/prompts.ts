@@ -70,7 +70,7 @@ const TRIGGER_PROMPTS: Record<TriggerType, string> = {
 
   final_push: `TRIGGER: The runner is in the final stretch of their run. Bring the energy up. This is where the coach earns their keep. Motivate without commanding.`,
 
-  idle_storytelling: `TRIGGER: No coaching event for a while. The runner is in a steady state. Tell a fascinating story in 4-6 sentences, share an observation about the collective, offer a mindfulness moment, or ask if they want to hear something specific. Match the storytelling style to the persona. For stories, end with a cliffhanger or "to be continued" so you can pick up next time.`,
+  idle_storytelling: `TRIGGER: No coaching event for a while. The runner is in a steady state. If there is a cliffhanger from your previous message listed in PREVIOUS COACHING, CONTINUE that story. Otherwise, tell a NEW story on a topic you haven't covered yet (check PREVIOUS COACHING for topics already used). 4-6 sentences. Match the storytelling style to the persona. End with a cliffhanger or "to be continued" so you can pick up next time. NEVER repeat a story or topic from the PREVIOUS COACHING section.`,
 
   user_initiated: `TRIGGER: The runner tapped the "talk to coach" button. Respond warmly and helpfully. Offer a quick check-in, encouragement, or ask what they need.`,
 };

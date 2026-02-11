@@ -28,6 +28,7 @@ export async function streamCoachingMessage(
     const decoder = new TextDecoder();
     let buffer = '';
     let fullText = '';
+    let collectedFullText = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -51,6 +52,7 @@ export async function streamCoachingMessage(
               event.delta?.type === 'text_delta'
             ) {
               fullText += event.delta.text;
+              collectedFullText += event.delta.text;
 
               // Check for complete sentence (ends with . ! ? and followed by space or is end)
               const sentenceEnd = fullText.match(
@@ -76,7 +78,7 @@ export async function streamCoachingMessage(
       onSentence(fullText.trim());
     }
 
-    onComplete(fullText);
+    onComplete(collectedFullText);
   } catch (error) {
     onError(error instanceof Error ? error : new Error(String(error)));
   }

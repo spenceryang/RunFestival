@@ -42,6 +42,15 @@ export interface CoachingContext {
     averagePaceFormatted: string;
   };
   userMessage?: string;
+  conversationHistory?: {
+    recentMessages: Array<{
+      triggerType: TriggerType;
+      summary: string;
+      topics: string[];
+    }>;
+    topicsCovered: string[];
+    lastCliffhanger: string | null;
+  };
 }
 
 export interface CoachingMessage {
