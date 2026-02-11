@@ -1,4 +1,3 @@
-import type { CoachingPersona } from '@/types/run';
 import type { CoachingContext, PersonaVoiceConfig } from '@/types/coach';
 import { streamCoachingMessage } from '@/lib/coach/coach-client';
 import { requestTTS } from './tts-client';
@@ -16,6 +15,8 @@ export class AudioManager {
   private isPlaying = false;
   private audioContext: AudioContext | null = null;
   private isMuted = false;
+  private currentSource: AudioBufferSourceNode | null = null;
+  private interrupted = false;
 
   private getAudioContext(): AudioContext {
     if (!this.audioContext) {
@@ -28,8 +29,37 @@ export class AudioManager {
     return this.audioContext;
   }
 
+  /**
+   * Stop all current and queued audio immediately.
+   * Use before enqueue() when the user speaks — their response takes priority.
+   */
+  interrupt(): void {
+    this.interrupted = true;
+    this.queue = [];
+
+    // Stop current Web Audio playback
+    if (this.currentSource) {
+      try {
+        this.currentSource.stop();
+      } catch {
+        // Already stopped
+      }
+      this.currentSource = null;
+    }
+
+    // Cancel any browser TTS in progress
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      speechSynthesis.cancel();
+    }
+
+    this.isPlaying = false;
+  }
+
   async enqueue(context: CoachingContext): Promise<void> {
     if (this.isMuted) return;
+
+    // Reset interrupted flag on new enqueue
+    this.interrupted = false;
 
     if (this.queue.length >= MAX_QUEUE_SIZE) {
       this.queue.shift(); // Drop oldest
@@ -42,6 +72,8 @@ export class AudioManager {
   }
 
   private async processNext(): Promise<void> {
+    if (this.interrupted) return;
+
     const next = this.queue.shift();
     if (!next) {
       this.isPlaying = false;
@@ -57,8 +89,10 @@ export class AudioManager {
       // Audio error — fall back silently per CLAUDE.md
     }
 
-    // Process next in queue
-    await this.processNext();
+    // Process next in queue (unless interrupted)
+    if (!this.interrupted) {
+      await this.processNext();
+    }
   }
 
   private async processCoachingRequest(
@@ -69,12 +103,16 @@ export class AudioManager {
       const sentences: string[] = [];
       let sentenceIndex = 0;
       let isStreamDone = false;
+      let isProcessing = false;
 
       const playSentence = async (sentence: string) => {
+        if (this.interrupted) return;
         try {
           const audioBuffer = await requestTTS(sentence, voiceConfig);
+          if (this.interrupted) return;
           await this.playAudioBuffer(audioBuffer);
         } catch {
+          if (this.interrupted) return;
           // ElevenLabs failed, try browser TTS
           try {
             await speakWithBrowserTTS(sentence);
@@ -85,13 +123,19 @@ export class AudioManager {
       };
 
       const processQueue = async () => {
-        while (sentenceIndex < sentences.length) {
+        // Prevent concurrent processQueue loops
+        if (isProcessing) return;
+        isProcessing = true;
+
+        while (sentenceIndex < sentences.length && !this.interrupted) {
           const sentence = sentences[sentenceIndex];
           sentenceIndex++;
           await playSentence(sentence);
         }
 
-        if (isStreamDone) {
+        isProcessing = false;
+
+        if (isStreamDone || this.interrupted) {
           resolve();
         }
       };
@@ -99,18 +143,19 @@ export class AudioManager {
       streamCoachingMessage(
         context,
         (sentence) => {
+          if (this.interrupted) return;
           sentences.push(sentence);
-          // Start playing if not already
-          if (sentences.length === 1) {
+          // Start playing if not already processing
+          if (!isProcessing) {
             processQueue();
           }
         },
         () => {
           isStreamDone = true;
           // If all sentences already processed, resolve
-          if (sentenceIndex >= sentences.length) {
+          if (sentenceIndex >= sentences.length || this.interrupted) {
             resolve();
-          } else {
+          } else if (!isProcessing) {
             processQueue();
           }
         },
@@ -128,6 +173,7 @@ export class AudioManager {
     return new Promise<void>((resolve) => {
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
+      this.currentSource = source;
 
       // Set volume lower to not compete with music
       const gainNode = ctx.createGain();
@@ -136,7 +182,12 @@ export class AudioManager {
       source.connect(gainNode);
       gainNode.connect(ctx.destination);
 
-      source.onended = () => resolve();
+      source.onended = () => {
+        if (this.currentSource === source) {
+          this.currentSource = null;
+        }
+        resolve();
+      };
       source.start(0);
     });
   }
@@ -144,7 +195,7 @@ export class AudioManager {
   setMuted(muted: boolean): void {
     this.isMuted = muted;
     if (muted) {
-      this.queue = [];
+      this.interrupt();
     }
   }
 
@@ -153,8 +204,7 @@ export class AudioManager {
   }
 
   destroy(): void {
-    this.queue = [];
-    this.isPlaying = false;
+    this.interrupt();
     if (this.audioContext) {
       this.audioContext.close();
       this.audioContext = null;

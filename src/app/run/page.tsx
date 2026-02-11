@@ -163,6 +163,8 @@ function RunPage() {
     // Attach the runner's spoken message if provided
     if (userMessage) {
       context.userMessage = userMessage;
+      // Interrupt current audio — user's voice response takes priority
+      audioManagerRef.current.interrupt();
     }
 
     audioManagerRef.current.enqueue(context);
