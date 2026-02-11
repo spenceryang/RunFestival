@@ -132,7 +132,8 @@ function ProfileForm() {
   };
 
   return (
-    <div className="min-h-screen bg-festival-darker px-6 py-8">
+    <div className="min-h-screen bg-festival-darker px-6 py-8 flex flex-col items-center">
+      <div className="w-full max-w-md">
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
         {!isOnboarding && (
@@ -162,7 +163,7 @@ function ProfileForm() {
       </div>
 
       {/* Form */}
-      <div className="space-y-6 max-w-md">
+      <div className="space-y-6">
         {/* Name */}
         <div>
           <label className="block text-sm text-festival-text mb-2">Name *</label>
@@ -350,6 +351,7 @@ function ProfileForm() {
             Sign Out
           </button>
         )}
+      </div>
       </div>
     </div>
   );
