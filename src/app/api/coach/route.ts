@@ -31,6 +31,10 @@ export async function POST(request: NextRequest) {
     ? `TRIGGER: The runner spoke to you and said: "${context.userMessage}". Respond directly to what they asked or said, using their current run data for context. Be helpful and conversational.`
     : triggerPrompt;
 
+  // Storytelling and user-initiated get more room for longer responses
+  const isLongForm = context.trigger.type === 'idle_storytelling' || context.trigger.type === 'user_initiated';
+  const maxTokens = isLongForm ? 400 : 150;
+
   const userMessage = `${effectiveTriggerPrompt}
 
 CURRENT RUN STATE:
@@ -60,7 +64,7 @@ ${JSON.stringify(context.trigger.data)}`;
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 150,
+        max_tokens: maxTokens,
         stream: true,
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
