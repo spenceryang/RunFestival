@@ -13,9 +13,10 @@ import { CollectiveBanner } from './CollectiveBanner';
 interface RunScreenProps {
   onFinish: () => void;
   onTalkToCoach: () => void;
+  isListening?: boolean;
 }
 
-export function RunScreen({ onFinish, onTalkToCoach }: RunScreenProps) {
+export function RunScreen({ onFinish, onTalkToCoach, isListening = false }: RunScreenProps) {
   const store = useRunStore();
   const trackerRef = useRef<GpsTracker | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -212,6 +213,7 @@ export function RunScreen({ onFinish, onTalkToCoach }: RunScreenProps) {
       <div className="pb-safe px-6 pb-8">
         <RunControls
           status={store.status}
+          isListening={isListening}
           onPause={handlePause}
           onResume={handleResume}
           onStop={handleStop}

@@ -5,6 +5,8 @@ import { useRunStore } from '@/lib/store/run-store';
 import { useCollectiveStore } from '@/lib/store/collective-store';
 import { RecapStats } from '@/components/recap/RecapStats';
 import { SplitsTable } from '@/components/recap/SplitsTable';
+import { RecapNarrative } from '@/components/recap/RecapNarrative';
+import { RecapMap } from '@/components/recap/RecapMap';
 import { Home, Share2, Zap } from 'lucide-react';
 
 export default function RecapPage() {
@@ -27,6 +29,15 @@ export default function RecapPage() {
         <p className="text-festival-muted">Great effort out there</p>
       </div>
 
+      {/* Map */}
+      <div className="mb-6">
+        <RecapMap
+          gpsPoints={store.gpsPoints}
+          splits={store.splits}
+          averagePaceSecondsPerKm={store.averagePaceSecondsPerKm}
+        />
+      </div>
+
       {/* Stats */}
       <div className="space-y-4 mb-6">
         <RecapStats
@@ -35,6 +46,20 @@ export default function RecapPage() {
           averagePace={store.averagePaceSecondsPerKm}
           splitsCount={store.splits.length}
           unit={store.distanceUnit}
+        />
+      </div>
+
+      {/* AI Recap Narrative */}
+      <div className="mb-6">
+        <RecapNarrative
+          distanceMeters={store.distanceMeters}
+          elapsedSeconds={store.elapsedSeconds}
+          averagePaceSecondsPerKm={store.averagePaceSecondsPerKm}
+          targetPaceSecondsPerKm={store.targetPaceSecondsPerKm}
+          targetDistanceMeters={store.targetDistanceMeters}
+          splits={store.splits.map((s) => ({ number: s.number, paceSeconds: s.paceSeconds }))}
+          persona={store.persona}
+          runnerCount={collective.runnerCount}
         />
       </div>
 

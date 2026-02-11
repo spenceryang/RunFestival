@@ -41,6 +41,7 @@ export interface CoachingContext {
     recentEvents: Array<{ type: string; text: string }>;
     averagePaceFormatted: string;
   };
+  userMessage?: string;
 }
 
 export interface CoachingMessage {

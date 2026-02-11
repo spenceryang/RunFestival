@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useRunStore } from '@/lib/store/run-store';
 import { useCollectiveStore } from '@/lib/store/collective-store';
@@ -9,6 +9,7 @@ import { DemoRunScreen } from '@/components/run/DemoRunScreen';
 import { CoachingTriggerEngine } from '@/lib/coach/trigger-engine';
 import { buildCoachingContext } from '@/lib/coach/context-builder';
 import { AudioManager } from '@/lib/audio/audio-manager';
+import { VoiceInput } from '@/lib/audio/voice-input';
 
 export default function RunPageWrapper() {
   return (
@@ -25,8 +26,10 @@ function RunPage() {
   const store = useRunStore();
   const triggerEngineRef = useRef<CoachingTriggerEngine | null>(null);
   const audioManagerRef = useRef<AudioManager | null>(null);
+  const voiceInputRef = useRef<VoiceInput | null>(null);
   const prevSnapshotRef = useRef<typeof store | null>(null);
   const triggerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [isListening, setIsListening] = useState(false);
 
   // Initialize coaching systems
   useEffect(() => {
@@ -40,6 +43,7 @@ function RunPage() {
 
     triggerEngineRef.current = new CoachingTriggerEngine();
     audioManagerRef.current = new AudioManager();
+    voiceInputRef.current = new VoiceInput();
 
     // Evaluate triggers every 3 seconds
     triggerIntervalRef.current = setInterval(() => {
@@ -106,6 +110,7 @@ function RunPage() {
       if (triggerIntervalRef.current) clearInterval(triggerIntervalRef.current);
       triggerEngineRef.current?.reset();
       audioManagerRef.current?.destroy();
+      voiceInputRef.current?.destroy();
     };
   }, [store.status, router]);
 
@@ -113,7 +118,7 @@ function RunPage() {
     router.push('/recap');
   }, [router]);
 
-  const handleTalkToCoach = useCallback(() => {
+  const sendToCoach = useCallback((userMessage?: string) => {
     const currentState = useRunStore.getState();
     const collectiveState = useCollectiveStore.getState();
 
@@ -153,14 +158,50 @@ function RunPage() {
       collectiveState
     );
 
+    // Attach the runner's spoken message if provided
+    if (userMessage) {
+      context.userMessage = userMessage;
+    }
+
     audioManagerRef.current.enqueue(context);
   }, []);
+
+  const handleTalkToCoach = useCallback(() => {
+    // If already listening, stop and fall back to regular coach trigger
+    if (voiceInputRef.current?.isListening) {
+      voiceInputRef.current.stop();
+      setIsListening(false);
+      return;
+    }
+
+    // Try voice input first; fall back to regular coach trigger if unsupported
+    if (VoiceInput.isSupported()) {
+      const started = voiceInputRef.current?.start(
+        (transcript) => {
+          setIsListening(false);
+          sendToCoach(transcript);
+        },
+        () => {
+          setIsListening(false);
+        }
+      );
+
+      if (started) {
+        setIsListening(true);
+        return;
+      }
+    }
+
+    // Fallback: trigger coach without voice message
+    sendToCoach();
+  }, [sendToCoach]);
 
   if (isDemo) {
     return (
       <DemoRunScreen
         onFinish={handleFinish}
         onTalkToCoach={handleTalkToCoach}
+        isListening={isListening}
       />
     );
   }
@@ -169,6 +210,7 @@ function RunPage() {
     <RunScreen
       onFinish={handleFinish}
       onTalkToCoach={handleTalkToCoach}
+      isListening={isListening}
     />
   );
 }

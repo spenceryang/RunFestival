@@ -5,6 +5,7 @@ import type { RunStatus } from '@/types/run';
 
 interface RunControlsProps {
   status: RunStatus;
+  isListening?: boolean;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
@@ -13,6 +14,7 @@ interface RunControlsProps {
 
 export function RunControls({
   status,
+  isListening = false,
   onPause,
   onResume,
   onStop,
@@ -26,11 +28,14 @@ export function RunControls({
         <>
           <button
             onClick={onTalkToCoach}
-            className="w-14 h-14 rounded-full bg-festival-card border border-festival-border
-                       flex items-center justify-center active:scale-95 transition-transform"
-            aria-label="Talk to coach"
+            className={`w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all ${
+              isListening
+                ? 'bg-festival-orange/20 border-2 border-festival-orange animate-pulse'
+                : 'bg-festival-card border border-festival-border'
+            }`}
+            aria-label={isListening ? 'Listening...' : 'Talk to coach'}
           >
-            <Mic className="w-6 h-6 text-festival-orange" />
+            <Mic className={`w-6 h-6 ${isListening ? 'text-white' : 'text-festival-orange'}`} />
           </button>
 
           <button

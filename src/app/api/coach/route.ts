@@ -26,7 +26,12 @@ export async function POST(request: NextRequest) {
   const systemPrompt = buildSystemPrompt(context.persona);
   const triggerPrompt = buildTriggerPrompt(context.trigger.type);
 
-  const userMessage = `${triggerPrompt}
+  // If the runner spoke a voice message, override the trigger prompt
+  const effectiveTriggerPrompt = context.userMessage
+    ? `TRIGGER: The runner spoke to you and said: "${context.userMessage}". Respond directly to what they asked or said, using their current run data for context. Be helpful and conversational.`
+    : triggerPrompt;
+
+  const userMessage = `${effectiveTriggerPrompt}
 
 CURRENT RUN STATE:
 - Distance: ${(context.runState.distanceMeters / 1000).toFixed(2)}km${context.runState.targetDistanceMeters ? ` of ${(context.runState.targetDistanceMeters / 1000).toFixed(1)}km` : ''}
