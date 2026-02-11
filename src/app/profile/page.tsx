@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Check, Zap } from 'lucide-react';
+import { ArrowLeft, Check, Zap, LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/lib/store/user-store';
 import type { CoachingPersona } from '@/types/run';
@@ -34,6 +34,7 @@ function ProfileForm() {
   const isOnboarding = searchParams.get('onboarding') === 'true';
   const existingUser = useUserStore((s) => s.user);
   const fetchUser = useUserStore((s) => s.fetchUser);
+  const signOut = useUserStore((s) => s.signOut);
 
   const [name, setName] = useState('');
   const [city, setCity] = useState('');
@@ -332,6 +333,23 @@ function ProfileForm() {
             'Save Profile'
           )}
         </button>
+
+        {/* Sign Out — only show on edit mode (not onboarding) */}
+        {!isOnboarding && (
+          <button
+            onClick={async () => {
+              await signOut();
+              router.push('/');
+            }}
+            className="w-full py-3 rounded-xl bg-festival-card border border-festival-border
+                       text-red-400 font-medium
+                       active:scale-[0.98] transition-transform
+                       flex items-center justify-center gap-2 mt-4"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </button>
+        )}
       </div>
     </div>
   );

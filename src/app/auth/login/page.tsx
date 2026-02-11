@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { Zap, Mail, ArrowLeft } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient, getSiteUrl } from '@/lib/supabase/client';
 
 function LoginForm() {
   const router = useRouter();
@@ -17,7 +17,11 @@ function LoginForm() {
     errorParam ? 'error' : 'idle'
   );
   const [errorMessage, setErrorMessage] = useState(
-    errorParam === 'auth' ? 'Authentication failed. Please try again.' : ''
+    errorParam === 'auth'
+      ? 'Authentication failed. Please try again.'
+      : errorParam === 'session'
+        ? 'Your session has expired. Please sign in again.'
+        : ''
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -29,10 +33,11 @@ function LoginForm() {
 
     try {
       const supabase = createClient();
+      const siteUrl = getSiteUrl();
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`,
+          emailRedirectTo: `${siteUrl}/auth/callback?redirect=${encodeURIComponent(redirect)}`,
         },
       });
 
@@ -64,9 +69,9 @@ function LoginForm() {
       {/* Content */}
       <div className="flex-1 flex flex-col items-center justify-center px-6">
         <Zap className="w-10 h-10 text-festival-orange mb-4" />
-        <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
+        <h1 className="text-3xl font-bold text-white mb-2">Join the Run</h1>
         <p className="text-festival-muted text-center mb-8">
-          Sign in to save your runs and get personalized coaching
+          Sign in or create an account with your email — no password needed
         </p>
 
         {status === 'sent' ? (
@@ -81,7 +86,7 @@ function LoginForm() {
                 <span className="text-white font-medium">{email}</span>
               </p>
               <p className="text-festival-muted text-sm mt-2">
-                Click the link in the email to sign in.
+                Click the link in the email to sign in. New here? We&apos;ll set up your profile next.
               </p>
             </div>
             <button
@@ -128,6 +133,10 @@ function LoginForm() {
             >
               {status === 'sending' ? 'Sending...' : 'Send Magic Link'}
             </button>
+
+            <p className="text-xs text-festival-muted text-center">
+              Works for both new and existing accounts
+            </p>
           </form>
         )}
 

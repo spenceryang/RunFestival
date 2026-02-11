@@ -82,8 +82,9 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 
 ### Auth (`src/lib/auth/` + `src/app/auth/` + `middleware.ts`)
 - **`middleware.ts`** — Protects /setup, /run, /recap, /profile. Bypasses auth for ?demo=true.
-- **`auth/login/page.tsx`** — Magic link login (Supabase OTP).
-- **`auth/callback/route.ts`** — Handles magic link redirect + profile check.
+- **`auth/login/page.tsx`** — Unified login/signup via magic link (Supabase OTP). Uses `getSiteUrl()` for redirect URLs.
+- **`auth/callback/route.ts`** — Handles magic link redirect, exchanges code for session, redirects new users to profile onboarding.
+- **`supabase/client.ts`** — Browser Supabase client + `getSiteUrl()` helper for auth redirects (priority: NEXT_PUBLIC_SITE_URL > VERCEL_URL > window.location.origin).
 - **`demo-headers.ts`** — Adds X-Demo-Mode header when user is not authenticated.
 
 ### Services (`src/lib/services/`)
@@ -146,7 +147,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **Streaming responses**: `/api/coach` and `/api/tts` both stream. Don't buffer full responses.
 
 ### Testing
-- **231 tests** across 19 test files. All must pass before pushing.
+- **238 tests** across 20 test files. All must pass before pushing.
 - **Ask before deleting any tests.** User's explicit standing instruction.
 - Run: `npx vitest run`
 - Build: `npx next build`
@@ -209,6 +210,7 @@ See `docs/AGENTS.md` for full architecture details.
 ## Environment Variables
 
 ```
+NEXT_PUBLIC_SITE_URL       — Production URL for auth redirects (e.g. https://runfestival.vercel.app)
 ANTHROPIC_API_KEY          — Claude API (server-side only)
 ELEVENLABS_API_KEY         — ElevenLabs TTS (server-side only)
 NEXT_PUBLIC_MAPBOX_TOKEN   — Mapbox GL JS (client-side)
@@ -217,6 +219,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY — Supabase anon key
 SUPABASE_SERVICE_ROLE_KEY  — Supabase admin (server-side only)
 OPENWEATHER_API_KEY        — Weather data (unused currently)
 ```
+
+**Important:** `NEXT_PUBLIC_SITE_URL` must be set in Vercel environment variables to `https://runfestival.vercel.app` for production magic link redirects to work. Without it, magic links will redirect to localhost. Also ensure this URL is whitelisted in Supabase Dashboard → Auth → URL Configuration → Redirect URLs.
 
 ## Past Bugs & Fixes (Learn From These)
 
@@ -231,6 +235,8 @@ OPENWEATHER_API_KEY        — Weather data (unused currently)
 5. **Voice changed on pause/resume**: The coaching `useEffect` in `run/page.tsx` had `store.status` in its dependency array. When status changed (`running` → `paused` → `running`), the effect destroyed and recreated AudioManager, closing the AudioContext. Mid-flight ElevenLabs requests would fail and fall back to browser SpeechSynthesis (different voice). Fixed by: (a) splitting the monolithic effect into 3 (redirect, coaching lifecycle mount-only, pause/resume audio), (b) adding `pause()`/`resume()` to AudioManager that stop playback without destroying AudioContext, (c) using callback refs to avoid stale closures in the mount-only interval.
 
 6. **Exclusionary pace labels**: Old PaceSelector had labels like "Easy" at 6:30/km and maxed at 6:30, alienating slower runners. Redesigned with inclusive labels ("Competitive" → "Easy Going"), extended range to 10:00/km, slider with visual bars, and "No target — just run" option. Goal: encourage everyone to run more.
+
+7. **Magic link redirected to localhost**: Login page used `window.location.origin` for the magic link redirect URL, which resolved to `http://localhost:3000` in dev. In production, Supabase needs the production URL whitelisted. Fixed by: (a) adding `getSiteUrl()` helper that prioritizes `NEXT_PUBLIC_SITE_URL` env var > `NEXT_PUBLIC_VERCEL_URL` > `window.location.origin`, (b) using `getSiteUrl()` in both login page and callback route, (c) adding `NEXT_PUBLIC_SITE_URL` env var. Also fixed: no sign-up flow (unified login/signup page), no sign-out button (added dropdown menu on home page + sign-out on profile page), "Welcome Back" copy alienated new users (changed to "Join the Run").
 
 ## Definition of Done (Engineering Standards)
 

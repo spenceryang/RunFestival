@@ -26,6 +26,7 @@ interface UserStore {
   fetchUser: () => Promise<void>;
   clearUser: () => void;
   updateUser: (updates: Partial<UserProfile>) => void;
+  signOut: () => Promise<void>;
 }
 
 export const useUserStore = create<UserStore>((set) => ({
@@ -91,4 +92,14 @@ export const useUserStore = create<UserStore>((set) => ({
     set((state) => ({
       user: state.user ? { ...state.user, ...updates } : null,
     })),
+
+  signOut: async () => {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch {
+      // Sign out from Supabase failed — clear local state anyway
+    }
+    set({ user: null, isAuthenticated: false, isLoading: false });
+  },
 }));

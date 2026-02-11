@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Users, Zap, Monitor, User, LogIn } from 'lucide-react';
+import { Play, Users, Zap, Monitor, User, LogIn, LogOut, ChevronDown } from 'lucide-react';
 import { useCollectiveStore } from '@/lib/store/collective-store';
 import { useRunStore } from '@/lib/store/run-store';
 import { useUserStore } from '@/lib/store/user-store';
@@ -12,6 +13,9 @@ export default function HomePage() {
   const startRun = useRunStore((s) => s.startRun);
   const user = useUserStore((s) => s.user);
   const isAuthenticated = useUserStore((s) => s.isAuthenticated);
+  const signOut = useUserStore((s) => s.signOut);
+
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const handleDemo = () => {
     startRun({
@@ -22,19 +26,65 @@ export default function HomePage() {
     router.push('/run?demo=true');
   };
 
+  const handleSignOut = async () => {
+    setShowUserMenu(false);
+    await signOut();
+    router.push('/');
+  };
+
   return (
     <div className="min-h-screen bg-festival-darker flex flex-col">
       {/* Auth bar */}
       <div className="flex items-center justify-end px-6 pt-4">
         {isAuthenticated && user ? (
-          <button
-            onClick={() => router.push('/profile')}
-            className="flex items-center gap-2 text-sm text-festival-text
-                       hover:text-festival-orange transition-colors"
-          >
-            <User className="w-4 h-4" />
-            {user.name}
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="flex items-center gap-2 text-sm text-festival-text
+                         hover:text-festival-orange transition-colors"
+            >
+              <User className="w-4 h-4" />
+              {user.name}
+              <ChevronDown className="w-3 h-3" />
+            </button>
+
+            {/* Dropdown menu */}
+            {showUserMenu && (
+              <>
+                {/* Backdrop to close menu */}
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowUserMenu(false)}
+                />
+                <div className="absolute right-0 top-full mt-2 w-44 z-20
+                                bg-festival-card border border-festival-border rounded-xl
+                                shadow-xl overflow-hidden">
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      router.push('/profile');
+                    }}
+                    className="w-full px-4 py-3 text-left text-sm text-festival-text
+                               hover:bg-festival-border/50 transition-colors
+                               flex items-center gap-2"
+                  >
+                    <User className="w-4 h-4" />
+                    Edit Profile
+                  </button>
+                  <div className="border-t border-festival-border" />
+                  <button
+                    onClick={handleSignOut}
+                    className="w-full px-4 py-3 text-left text-sm text-red-400
+                               hover:bg-festival-border/50 transition-colors
+                               flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign Out
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         ) : (
           <button
             onClick={() => router.push('/auth/login')}

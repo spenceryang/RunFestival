@@ -1,14 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useUserStore } from '@/lib/store/user-store';
 
+const mockSignOut = vi.fn().mockResolvedValue({});
+
 // Mock Supabase client
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
     auth: {
       getUser: vi.fn(),
+      signOut: mockSignOut,
     },
     from: vi.fn(),
   }),
+  getSiteUrl: () => 'http://localhost:3000',
 }));
 
 describe('useUserStore', () => {
@@ -179,5 +183,65 @@ describe('useUserStore', () => {
     expect(user.streakLongest).toBe(14);
     expect(user.totalDistanceMeters).toBe(50000);
     expect(user.totalRuns).toBe(10);
+  });
+
+  it('signOut calls supabase.auth.signOut and clears local state', async () => {
+    // Set up an authenticated user
+    useUserStore.setState({
+      user: {
+        id: '123',
+        email: 'test@example.com',
+        name: 'Runner',
+        city: null,
+        experienceLevel: 'intermediate',
+        preferredPersona: 'hype',
+        storyTopics: [],
+        distanceUnit: 'km',
+        activityTypes: ['running'],
+        streakCurrent: 5,
+        streakLongest: 10,
+        totalDistanceMeters: 25000,
+        totalRuns: 5,
+      },
+      isAuthenticated: true,
+    });
+
+    await useUserStore.getState().signOut();
+
+    const state = useUserStore.getState();
+    expect(state.user).toBeNull();
+    expect(state.isAuthenticated).toBe(false);
+    expect(state.isLoading).toBe(false);
+    expect(mockSignOut).toHaveBeenCalled();
+  });
+
+  it('signOut clears local state even if supabase signOut fails', async () => {
+    mockSignOut.mockRejectedValueOnce(new Error('Network error'));
+
+    useUserStore.setState({
+      user: {
+        id: '123',
+        email: 'test@example.com',
+        name: 'Runner',
+        city: null,
+        experienceLevel: 'intermediate',
+        preferredPersona: 'hype',
+        storyTopics: [],
+        distanceUnit: 'km',
+        activityTypes: ['running'],
+        streakCurrent: 0,
+        streakLongest: 0,
+        totalDistanceMeters: 0,
+        totalRuns: 0,
+      },
+      isAuthenticated: true,
+    });
+
+    // Should not throw even when Supabase fails
+    await useUserStore.getState().signOut();
+
+    const state = useUserStore.getState();
+    expect(state.user).toBeNull();
+    expect(state.isAuthenticated).toBe(false);
   });
 });
