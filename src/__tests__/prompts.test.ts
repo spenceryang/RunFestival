@@ -87,21 +87,17 @@ describe('PERSONA_VOICE_CONFIG', () => {
 
   it('each config has required fields', () => {
     for (const config of Object.values(PERSONA_VOICE_CONFIG)) {
-      expect(config.elevenLabsVoiceId).toBeTruthy();
-      expect(config.stability).toBeGreaterThanOrEqual(0);
-      expect(config.stability).toBeLessThanOrEqual(1);
-      expect(config.similarity).toBeGreaterThanOrEqual(0);
-      expect(config.similarity).toBeLessThanOrEqual(1);
-      expect(config.style).toBeGreaterThanOrEqual(0);
-      expect(config.style).toBeLessThanOrEqual(1);
+      expect(config.voice).toBeTruthy();
+      expect(typeof config.voice).toBe('string');
       expect(config.speed).toBeGreaterThan(0);
     }
   });
 
-  it('hype has lower stability for expressiveness', () => {
-    expect(PERSONA_VOICE_CONFIG.hype.stability).toBeLessThan(
-      PERSONA_VOICE_CONFIG.calm.stability
-    );
+  it('uses valid OpenAI voice names', () => {
+    const validVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+    for (const config of Object.values(PERSONA_VOICE_CONFIG)) {
+      expect(validVoices).toContain(config.voice);
+    }
   });
 
   it('hype has faster speed', () => {

@@ -1,5 +1,5 @@
 /**
- * Tracks ElevenLabs TTS API usage for cost monitoring and guards.
+ * Tracks OpenAI TTS API usage for cost monitoring and guards.
  * All data is session-scoped (resets on page reload).
  * Dev mode surfaces this in a UI panel.
  */
@@ -15,11 +15,11 @@ export interface TTSUsageSnapshot {
   blockedRequests: number;
 }
 
-// ElevenLabs pricing: ~$0.30 per 1000 characters (Turbo v2.5)
-const COST_PER_1000_CHARS = 0.30;
+// OpenAI TTS pricing: $15 per 1M characters = $0.015 per 1000 characters
+const COST_PER_1000_CHARS = 0.015;
 
 // Guards
-const MAX_CHARS_PER_SESSION = 50_000;       // ~$15 safety cap per session
+const MAX_CHARS_PER_SESSION = 50_000;       // ~$0.75 safety cap per session (OpenAI pricing)
 const MAX_REQUESTS_PER_MINUTE = 15;         // Rate limit
 const MAX_CHARS_PER_REQUEST = 1000;         // Single request cap
 

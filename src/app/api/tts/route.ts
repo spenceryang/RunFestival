@@ -4,9 +4,9 @@ import { createEdgeSupabaseClient } from '@/lib/supabase/edge';
 export const runtime = 'edge';
 
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'ElevenLabs API key not configured' }), {
+    return new Response(JSON.stringify({ error: 'OpenAI API key not configured' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -26,10 +26,7 @@ export async function POST(request: NextRequest) {
 
   let body: {
     text: string;
-    voiceId: string;
-    stability?: number;
-    similarity?: number;
-    style?: number;
+    voice: string;
     speed?: number;
   };
 
@@ -42,8 +39,8 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  if (!body.text || !body.voiceId) {
-    return new Response(JSON.stringify({ error: 'text and voiceId required' }), {
+  if (!body.text || !body.voice) {
+    return new Response(JSON.stringify({ error: 'text and voice required' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -59,23 +56,19 @@ export async function POST(request: NextRequest) {
 
   try {
     const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${body.voiceId}/stream`,
+      'https://api.openai.com/v1/audio/speech',
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'xi-api-key': apiKey,
+          'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          text: body.text,
-          model_id: 'eleven_turbo_v2_5',
-          output_format: 'mp3_44100_64',
-          voice_settings: {
-            stability: body.stability ?? 0.5,
-            similarity_boost: body.similarity ?? 0.75,
-            style: body.style ?? 0.5,
-            use_speaker_boost: true,
-          },
+          model: 'tts-1',
+          voice: body.voice,
+          input: body.text,
+          speed: body.speed ?? 1.0,
+          response_format: 'mp3',
         }),
       }
     );
@@ -97,7 +90,7 @@ export async function POST(request: NextRequest) {
     });
   } catch {
     return new Response(
-      JSON.stringify({ error: 'Failed to reach ElevenLabs API' }),
+      JSON.stringify({ error: 'Failed to reach OpenAI TTS API' }),
       {
         status: 502,
         headers: { 'Content-Type': 'application/json' },

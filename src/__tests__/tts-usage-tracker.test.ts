@@ -67,8 +67,8 @@ describe('tts-usage-tracker', () => {
     it('calculates estimated cost', () => {
       ttsUsageTracker.recordRequest(1000);
       const snapshot = ttsUsageTracker.getSnapshot();
-      // $0.30 per 1000 chars
-      expect(snapshot.estimatedCostUsd).toBeCloseTo(0.30, 2);
+      // $0.015 per 1000 chars (OpenAI TTS)
+      expect(snapshot.estimatedCostUsd).toBeCloseTo(0.015, 3);
     });
 
     it('calculates average chars per request', () => {

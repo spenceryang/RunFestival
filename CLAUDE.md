@@ -17,7 +17,7 @@ RunFestival is a deployed PWA that provides real-time AI voice coaching during r
 | State | Zustand (5 stores) | Run, coaching, collective, timeline, user |
 | Auth | Supabase Auth (magic link) | Email OTP, middleware-protected routes |
 | AI Coaching | Claude Opus 4.6 (streaming) | Via `/api/coach` edge route |
-| TTS | ElevenLabs `eleven_turbo_v2_5` | Via `/api/tts` edge route |
+| TTS | OpenAI TTS `tts-1` | Via `/api/tts` edge route |
 | Voice Input | Web Speech API | Browser-native, no API key |
 | Maps | Mapbox GL JS | [lng, lat] order — Geolocation uses [lat, lng] |
 | Presence | Supabase Realtime | City-sharded channels + global stats |
@@ -49,7 +49,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
                            ┌────────┴────────┐
                            │                  │
                     POST /api/coach    POST /api/tts
-                    (Opus 4.6 stream)  (ElevenLabs per sentence)
+                    (Opus 4.6 stream)  (OpenAI TTS per sentence)
                            │                  │
                            ▼                  ▼
                     Sentence parser ──► Web Audio API playback
@@ -69,7 +69,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 
 ### API Routes (`src/app/api/`)
 - **`coach/route.ts`** — Proxies to Claude Opus 4.6. Streams SSE. 600 tokens for storytelling, 200 for alerts. Includes specialist agent outputs.
-- **`tts/route.ts`** — Proxies to ElevenLabs. Streams MP3 audio. Uses persona-specific voice IDs.
+- **`tts/route.ts`** — Proxies to OpenAI TTS. Returns MP3 audio. Uses persona-specific OpenAI voices.
 - **`recap/route.ts`** — Sends run stats to Claude for post-run narrative. Non-streaming, 200 tokens.
 - **`story-plan/route.ts`** — Story Curator agent. Generates 3-part story plans via Opus 4.6. Async.
 - **`quality/route.ts`** — Quality Supervisor agent. Reviews coaching messages. Score 1-5 + feedback. Async.
@@ -105,7 +105,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **`prompts.ts`** — System prompts for 4 personas + 6 trigger prompts + voice configs
 - **`audio-manager.ts`** — Playback queue (max 2), interrupt/pause/resume support, sentence-level TTS streaming. Persistent HTMLAudioElement on iOS (avoids audio session conflicts). Duration-based + timeupdate watchdog completion signals. Four-layer fallback: Web Audio API → HTML `<audio>` element → SpeechSynthesis → silence.
 - **`tts-client.ts`** — Calls `/api/tts`, returns ArrayBuffer per sentence
-- **`fallback-tts.ts`** — Browser SpeechSynthesis when ElevenLabs fails. Async voice loading for iOS.
+- **`fallback-tts.ts`** — Browser SpeechSynthesis when OpenAI TTS fails. Async voice loading for iOS.
 - **`voice-input.ts`** — Web Speech API wrapper for runner voice commands. `onError` callback with typed error ('not-allowed', 'no-speech', etc.) for caller feedback.
 - **`audio-unlock.ts`** — Shared AudioContext singleton that survives client-side navigation. Unlocked during user gesture on setup page GO button. Required for iOS audio playback.
 - **`platform.ts`** — iOS detection utility (`isIOS()`). Handles iPad-as-Mac user agent.
@@ -146,7 +146,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 
 ### API Routes
 - **All 3 routes are edge runtime** — no Node.js APIs, no fs, no process (except env vars).
-- **API keys stay server-side** — never send Anthropic/ElevenLabs keys to the client. The `/api/*` routes exist specifically for this.
+- **API keys stay server-side** — never send Anthropic/OpenAI keys to the client. The `/api/*` routes exist specifically for this.
 - **Streaming responses**: `/api/coach` and `/api/tts` both stream. Don't buffer full responses.
 
 ### Testing
@@ -159,12 +159,12 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 ## Coaching System Details
 
 ### 4 Personas
-| Persona | Style | ElevenLabs Voice | Speed |
-|---------|-------|-----------------|-------|
-| Hype | Energetic, exclamations, celebrates | `pNInz6obpgDQGcFmaJgB` | 1.1x |
-| Calm | Mindful, breathing focus, grounding | `EXAVITQu4vr4xnSDxMaL` | 0.9x |
-| Data | Analytical, stats-driven, strategic | `21m00Tcm4TlvDq8ikWAM` | 1.0x |
-| Storyteller | Narratives, cliffhangers, topic-based | `yoZ06aMxZJJ28mfd3POQ` | 0.95x |
+| Persona | Style | OpenAI Voice | Speed |
+|---------|-------|-------------|-------|
+| Hype | Energetic, exclamations, celebrates | `nova` | 1.1x |
+| Calm | Mindful, breathing focus, grounding | `shimmer` | 0.9x |
+| Data | Analytical, stats-driven, strategic | `onyx` | 1.0x |
+| Storyteller | Narratives, cliffhangers, topic-based | `fable` | 0.95x |
 
 ### 6 Trigger Types
 | Trigger | When | Token Limit |
@@ -200,9 +200,9 @@ See `docs/AGENTS.md` for full architecture details.
 ## Known Limitations
 
 - **TTS is not truly streaming**: `tts-client.ts` calls `response.arrayBuffer()` which buffers the full audio per sentence before playback. True chunk-level streaming would reduce latency further but requires Web Audio API chunk decoding.
-- **No offline coaching**: Claude + ElevenLabs require internet. GPS tracking works offline (IndexedDB), but coaching goes silent. Completed runs are queued and synced on next app load.
+- **No offline coaching**: Claude + OpenAI TTS require internet. GPS tracking works offline (IndexedDB), but coaching goes silent. Completed runs are queued and synced on next app load.
 - **Global agents need scheduler**: Race Director and Story Library Edge Functions need an external cron scheduler (pg_cron or Vercel cron). Not auto-scheduled yet.
-- **Opus 4.6 cost**: Head Coach + Story Curator + Quality Supervisor use Opus 4.6. Estimated ~$0.17 per 30-min run. Monitor usage.
+- **API cost**: Head Coach + Story Curator + Quality Supervisor use Opus 4.6 (~$0.15/run). OpenAI TTS ~$0.02/run. Total ~$0.17 per 30-min run. Monitor usage.
 
 ## Dev Mode
 
@@ -213,7 +213,7 @@ See `docs/AGENTS.md` for full architecture details.
 ```
 NEXT_PUBLIC_SITE_URL       — Production URL for auth redirects (e.g. https://runfestival.vercel.app)
 ANTHROPIC_API_KEY          — Claude API (server-side only)
-ELEVENLABS_API_KEY         — ElevenLabs TTS (server-side only)
+OPENAI_API_KEY             — OpenAI TTS (server-side only)
 NEXT_PUBLIC_MAPBOX_TOKEN   — Mapbox GL JS (client-side)
 NEXT_PUBLIC_SUPABASE_URL   — Supabase project URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY — Supabase anon key

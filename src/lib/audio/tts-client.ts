@@ -5,7 +5,7 @@ import { ttsUsageTracker } from './tts-usage-tracker';
 const TTS_TIMEOUT_MS = 15_000; // 15 second timeout for TTS requests
 
 /**
- * Request TTS audio from ElevenLabs via our proxy endpoint.
+ * Request TTS audio from OpenAI via our proxy endpoint.
  * Returns the audio as an ArrayBuffer for playback.
  *
  * Guarded by the usage tracker — blocks requests when:
@@ -37,10 +37,7 @@ export async function requestTTS(
       signal: controller.signal,
       body: JSON.stringify({
         text,
-        voiceId: voiceConfig.elevenLabsVoiceId,
-        stability: voiceConfig.stability,
-        similarity: voiceConfig.similarity,
-        style: voiceConfig.style,
+        voice: voiceConfig.voice,
         speed: voiceConfig.speed,
       }),
     });

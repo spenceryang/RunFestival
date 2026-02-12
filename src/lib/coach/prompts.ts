@@ -88,31 +88,19 @@ export function buildTriggerPrompt(triggerType: TriggerType): string {
 
 export const PERSONA_VOICE_CONFIG: Record<CoachingPersona, PersonaVoiceConfig> = {
   hype: {
-    elevenLabsVoiceId: 'pNInz6obpgDQGcFmaJgB',
-    stability: 0.3,
-    similarity: 0.7,
-    style: 0.8,
+    voice: 'nova',     // Energetic, warm
     speed: 1.1,
   },
   calm: {
-    elevenLabsVoiceId: 'EXAVITQu4vr4xnSDxMaL',
-    stability: 0.7,
-    similarity: 0.8,
-    style: 0.3,
+    voice: 'shimmer',  // Soft, gentle
     speed: 0.9,
   },
   data: {
-    elevenLabsVoiceId: '21m00Tcm4TlvDq8ikWAM',
-    stability: 0.5,
-    similarity: 0.8,
-    style: 0.4,
+    voice: 'onyx',     // Clear, authoritative
     speed: 1.0,
   },
   storyteller: {
-    elevenLabsVoiceId: 'yoZ06aMxZJJ28mfd3POQ',
-    stability: 0.6,
-    similarity: 0.7,
-    style: 0.6,
+    voice: 'fable',    // Expressive, narrative
     speed: 0.95,
   },
 };

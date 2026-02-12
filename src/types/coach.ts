@@ -80,9 +80,6 @@ export interface CoachingMessage {
 }
 
 export interface PersonaVoiceConfig {
-  elevenLabsVoiceId: string;
-  stability: number;
-  similarity: number;
-  style: number;
-  speed: number;
+  voice: string;  // OpenAI TTS voice: alloy, echo, fable, onyx, nova, shimmer
+  speed: number;  // 0.25 to 4.0
 }
