@@ -336,6 +336,13 @@ function RunPage() {
         },
         () => {
           setIsListening(false);
+        },
+        (error) => {
+          // Voice input failed — log and fall through to sendToCoach
+          console.warn('[RunPage] Voice input error:', error);
+          setIsListening(false);
+          // Automatically ask coach without voice when mic fails
+          sendToCoach();
         }
       );
 

@@ -73,6 +73,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **`recap/route.ts`** — Sends run stats to Claude for post-run narrative. Non-streaming, 200 tokens.
 - **`story-plan/route.ts`** — Story Curator agent. Generates 3-part story plans via Opus 4.6. Async.
 - **`quality/route.ts`** — Quality Supervisor agent. Reviews coaching messages. Score 1-5 + feedback. Async.
+- **`active-runners/route.ts`** — Returns count of active runners from DB (heartbeat within 5 min). Uses service role key. Polled by community page every 30s.
 
 ### Specialist Agents (`src/lib/agents/`)
 - **`pace-strategist.ts`** — Rule-based. Analyzes splits, projects finish time, classifies pacing strategy. Zero API cost.
@@ -90,6 +91,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 ### Services (`src/lib/services/`)
 - **`run-persistence.ts`** — CRUD for runs table (createRunRecord, completeRunRecord, updateRunAiSummary).
 - **`offline-sync.ts`** — Queues failed run completions in IndexedDB, syncs on next app load.
+- **`active-runners.ts`** — DB-backed session tracking for active runners. `joinActiveRunners()` INSERTs into `active_runners` table on run start, `heartbeatActiveRunner()` UPDATEs `last_heartbeat` every 30s, `leaveActiveRunners()` DELETEs on run end. Enables cross-device visibility of who's running.
 
 ### Global Agents (`supabase/functions/`)
 - **`race-director/`** — Scans active runners every 60s, detects patterns, generates collective moments via Opus 4.6.
@@ -104,7 +106,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **`audio-manager.ts`** — Playback queue (max 2), interrupt/pause/resume support, sentence-level TTS streaming. Four-layer fallback: Web Audio API → HTML `<audio>` element → SpeechSynthesis → silence.
 - **`tts-client.ts`** — Calls `/api/tts`, returns ArrayBuffer per sentence
 - **`fallback-tts.ts`** — Browser SpeechSynthesis when ElevenLabs fails. Async voice loading for iOS.
-- **`voice-input.ts`** — Web Speech API wrapper for runner voice commands
+- **`voice-input.ts`** — Web Speech API wrapper for runner voice commands. `onError` callback with typed error ('not-allowed', 'no-speech', etc.) for caller feedback.
 - **`audio-unlock.ts`** — Shared AudioContext singleton that survives client-side navigation. Unlocked during user gesture on setup page GO button. Required for iOS audio playback.
 - **`platform.ts`** — iOS detection utility (`isIOS()`). Handles iPad-as-Mac user agent.
 
@@ -149,7 +151,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **Streaming responses**: `/api/coach` and `/api/tts` both stream. Don't buffer full responses.
 
 ### Testing
-- **267 tests** across 25 test files. All must pass before pushing.
+- **275 tests** across 26 test files. All must pass before pushing.
 - **Ask before deleting any tests.** User's explicit standing instruction.
 - Run: `npx vitest run`
 - Build: `npx next build`
@@ -242,12 +244,16 @@ OPENWEATHER_API_KEY        — Weather data (unused currently)
 
 7. **Magic link redirected to localhost**: Login page used `window.location.origin` for the magic link redirect URL, which resolved to `http://localhost:3000` in dev. In production, Supabase needs the production URL whitelisted. Fixed by: (a) adding `getSiteUrl()` helper that prioritizes `NEXT_PUBLIC_SITE_URL` env var > `NEXT_PUBLIC_VERCEL_URL` > `window.location.origin`, (b) using `getSiteUrl()` in both login page and callback route, (c) adding `NEXT_PUBLIC_SITE_URL` env var. Also fixed: no sign-up flow (unified login/signup page), no sign-out button (added dropdown menu on home page + sign-out on profile page), "Welcome Back" copy alienated new users (changed to "Join the Run").
 
+9. **Active runners not visible cross-device**: The `active_runners` DB table existed in the schema (with heartbeat cleanup, RLS policies, Realtime publication) but was never written to. All presence tracking relied on ephemeral Supabase Realtime channels — only worked between devices simultaneously subscribed to the same channel. Fixed by: (a) creating `active-runners.ts` service that INSERTs on run start, UPDATEs heartbeat every 30s, DELETEs on run end, (b) adding `/api/active-runners` endpoint that queries count of active runners (heartbeat within 5 min), (c) integrating join/heartbeat/leave lifecycle into `RunScreen.tsx`, (d) community page polls `/api/active-runners` every 30s for cross-device visibility.
+
+10. **Mic button didn't capture voice**: Web Speech API errors were silently swallowed — `onerror` handler didn't log the actual error type (`event.error` can be 'not-allowed', 'no-speech', 'aborted', etc.) and provided no feedback to the caller. On iOS, microphone permission failures appeared as "nothing happened" with no indication of why. Fixed by: (a) adding typed `onError` callback to `VoiceInput.start()`, (b) logging actual error type in `onerror` handler, (c) in `run/page.tsx`, passing error callback that automatically falls through to `sendToCoach()` when mic fails — runner still gets coach interaction even without voice.
+
 ## Definition of Done (Engineering Standards)
 
 Every feature implementation must complete ALL of the following before being considered done:
 
 ### Code Quality
-1. **All existing tests pass** — Run `npx vitest run` (currently 267 tests across 25 files)
+1. **All existing tests pass** — Run `npx vitest run` (currently 275 tests across 26 files)
 2. **Clean build** — Run `npx next build` with zero errors and zero warnings
 3. **No regressions** — Verify the change doesn't break existing functionality
 4. **Ask before deleting tests** — User's explicit standing instruction

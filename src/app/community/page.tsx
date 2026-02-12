@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Users } from 'lucide-react';
 import { useCollectiveStore } from '@/lib/store/collective-store';
@@ -8,6 +9,33 @@ import { CommunityTimeline } from '@/components/shared/CommunityTimeline';
 export default function CommunityPage() {
   const router = useRouter();
   const runnerCount = useCollectiveStore((s) => s.runnerCount);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Poll active runner count from DB every 30 seconds
+  useEffect(() => {
+    const fetchCount = async () => {
+      try {
+        const res = await fetch('/api/active-runners');
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data.count === 'number') {
+            const current = useCollectiveStore.getState().runnerCount;
+            // Use whichever is larger (Realtime may have more up-to-date info)
+            useCollectiveStore.getState().setRunnerCount(Math.max(data.count, current));
+          }
+        }
+      } catch {
+        // Non-critical — keep showing whatever count we have
+      }
+    };
+
+    fetchCount(); // Fetch immediately on mount
+    pollRef.current = setInterval(fetchCount, 30_000);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-festival-darker px-6 py-8">

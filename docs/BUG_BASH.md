@@ -132,10 +132,33 @@ See CLAUDE.md "Past Bugs & Fixes" section for previously resolved issues:
 
 ---
 
+### BUG-007: Active runners count not visible cross-device
+- **Severity:** High
+- **Status:** Fixed
+- **Reported:** 2026-02-11
+- **Description:** Active runners count on the community page was always 0 when viewed from a different device than the runner. Presence was ephemeral only.
+- **Root Cause:** The `active_runners` DB table existed but was never written to. Supabase Realtime presence channels are ephemeral — only visible between simultaneously-connected devices.
+- **Fix:** Created DB-backed session tracking: `active-runners.ts` service (join/heartbeat/leave), `/api/active-runners` endpoint (count query), integrated lifecycle into `RunScreen.tsx`, community page polls DB every 30s.
+- **Verification:** Start a run on device A, open `/community` on device B — should show "1 active runner".
+
+---
+
+### BUG-008: Mic button silently fails on iOS
+- **Severity:** Medium
+- **Status:** Fixed
+- **Reported:** 2026-02-11
+- **Description:** Tapping the mic button during a run did nothing — no listening indicator, no error feedback. Voice input appeared completely broken.
+- **Root Cause:** Web Speech API errors were silently swallowed. `onerror` handler didn't log the actual error type or provide feedback to the caller. On iOS, microphone permission denials appeared as "nothing happened".
+- **Fix:** Added typed `onError` callback to `VoiceInput.start()`, logged actual error types, added auto-fallback to `sendToCoach()` when mic fails so runner still gets coach interaction.
+- **Verification:** Tap mic button — should either capture voice or automatically fall through to coach interaction.
+
+---
+
 ## Test Coverage Notes
 
-- Current: 247 tests across 22 test files
+- Current: 275 tests across 26 test files
 - Timeline tests: `src/__tests__/timeline.test.ts` (covers synthetic generation + store)
 - Auth tests: `src/__tests__/get-site-url.test.ts` (covers `getSiteUrl()` env priority)
+- Active runners tests: `src/__tests__/active-runners.test.ts` (covers join/heartbeat/leave)
 - No tests for Safari PWA context, cookie isolation, or standalone mode detection
 - No tests for community feed DB integration

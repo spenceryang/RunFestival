@@ -16,6 +16,7 @@ import { useUserStore } from '@/lib/store/user-store';
 import { completeRunRecord } from '@/lib/services/run-persistence';
 import { queueRunForSync } from '@/lib/services/offline-sync';
 import { joinPresence, leavePresence, startHeartbeat } from '@/lib/collective/presence';
+import { joinActiveRunners, heartbeatActiveRunner, leaveActiveRunners } from '@/lib/services/active-runners';
 import { getGuestName } from '@/lib/guest-name';
 
 interface RunScreenProps {
@@ -32,26 +33,52 @@ export function RunScreen({ onFinish, onTalkToCoach, isListening = false, isCoac
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const saveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const presenceJoinedRef = useRef(false);
+  const activeRunnerIdRef = useRef<string | null>(null);
+  const dbHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Join presence channels on mount
+  // Join presence channels + DB active_runners on mount
   useEffect(() => {
     if (presenceJoinedRef.current) return;
     presenceJoinedRef.current = true;
 
     const displayName = user?.name ?? getGuestName() ?? 'Runner';
     const city = user?.city ?? 'Unknown';
-    joinPresence({
-      userId: user?.id ?? `guest-${Date.now()}`,
-      displayName,
-      city,
-    });
+    const userId = user?.id ?? `guest-${Date.now()}`;
+
+    // Realtime presence (ephemeral — instant updates between connected devices)
+    joinPresence({ userId, displayName, city });
     startHeartbeat(() => ({
       distanceMeters: useRunStore.getState().distanceMeters,
       currentPaceSecondsPerKm: useRunStore.getState().currentPaceSecondsPerKm,
     }));
 
+    // DB-backed active_runners (persistent — cross-device visibility)
+    const runId = useRunStore.getState().runId;
+    joinActiveRunners({ userId, runId, displayName, city }).then((id) => {
+      activeRunnerIdRef.current = id;
+    });
+
+    // DB heartbeat every 30s (independent of Realtime heartbeat)
+    dbHeartbeatRef.current = setInterval(() => {
+      if (activeRunnerIdRef.current) {
+        const s = useRunStore.getState();
+        heartbeatActiveRunner(activeRunnerIdRef.current, {
+          distanceMeters: s.distanceMeters,
+          currentPaceSecondsPerKm: s.currentPaceSecondsPerKm,
+        });
+      }
+    }, 30_000);
+
     return () => {
       leavePresence();
+      if (activeRunnerIdRef.current) {
+        leaveActiveRunners(activeRunnerIdRef.current);
+        activeRunnerIdRef.current = null;
+      }
+      if (dbHeartbeatRef.current) {
+        clearInterval(dbHeartbeatRef.current);
+        dbHeartbeatRef.current = null;
+      }
       presenceJoinedRef.current = false;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
