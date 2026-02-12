@@ -147,7 +147,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **Streaming responses**: `/api/coach` and `/api/tts` both stream. Don't buffer full responses.
 
 ### Testing
-- **238 tests** across 20 test files. All must pass before pushing.
+- **247 tests** across 22 test files. All must pass before pushing.
 - **Ask before deleting any tests.** User's explicit standing instruction.
 - Run: `npx vitest run`
 - Build: `npx next build`
@@ -243,7 +243,7 @@ OPENWEATHER_API_KEY        — Weather data (unused currently)
 Every feature implementation must complete ALL of the following before being considered done:
 
 ### Code Quality
-1. **All existing tests pass** — Run `npx vitest run` (currently 231+ tests across 19+ files)
+1. **All existing tests pass** — Run `npx vitest run` (currently 247 tests across 22 files)
 2. **Clean build** — Run `npx next build` with zero errors and zero warnings
 3. **No regressions** — Verify the change doesn't break existing functionality
 4. **Ask before deleting tests** — User's explicit standing instruction

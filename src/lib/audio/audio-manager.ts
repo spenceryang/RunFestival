@@ -43,7 +43,9 @@ export class AudioManager {
     }
     // Resume if suspended (e.g., after user gesture requirement)
     if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
+      this.audioContext.resume().catch(() => {
+        // Silent — context will resume on next user gesture
+      });
     }
     return this.audioContext;
   }

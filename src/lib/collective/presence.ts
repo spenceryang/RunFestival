@@ -123,6 +123,9 @@ export function joinPresence(runner: {
 export function startHeartbeat(
   getState: () => { distanceMeters: number; currentPaceSecondsPerKm: number }
 ): void {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+  }
   heartbeatInterval = setInterval(async () => {
     if (!cityChannel) return;
     const state = getState();
