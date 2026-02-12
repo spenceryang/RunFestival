@@ -4,6 +4,8 @@ import { requestTTS } from './tts-client';
 import { speakWithBrowserTTS } from './fallback-tts';
 import { PERSONA_VOICE_CONFIG } from '@/lib/coach/prompts';
 import { ttsUsageTracker } from './tts-usage-tracker';
+import { getSharedAudioContext, unlockAudioContext, isAudioUnlocked, destroySharedContext } from './audio-unlock';
+import { isIOS } from './platform';
 
 const MAX_QUEUE_SIZE = 2;
 
@@ -18,6 +20,7 @@ export class AudioManager {
   private audioContext: AudioContext | null = null;
   private isMuted = false;
   private currentSource: AudioBufferSourceNode | null = null;
+  private currentHtmlAudio: HTMLAudioElement | null = null;
   private interrupted = false;
   private isPaused = false;
   private visibilityHandler: (() => void) | null = null;
@@ -38,14 +41,15 @@ export class AudioManager {
   }
 
   private async getAudioContext(): Promise<AudioContext> {
-    if (!this.audioContext) {
-      this.audioContext = new AudioContext();
+    // Use the shared singleton (may have been unlocked from setup page)
+    const ctx = getSharedAudioContext();
+    this.audioContext = ctx;
+
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+      console.warn('[AudioManager] AudioContext resumed, state:', ctx.state);
     }
-    // Resume if suspended — must await on mobile where gesture is required
-    if (this.audioContext.state === 'suspended') {
-      await this.audioContext.resume();
-    }
-    return this.audioContext;
+    return ctx;
   }
 
   /**
@@ -56,9 +60,10 @@ export class AudioManager {
    */
   async warmUp(): Promise<void> {
     try {
-      await this.getAudioContext();
+      const unlocked = await unlockAudioContext();
+      console.warn('[AudioManager] warmUp result:', unlocked);
     } catch {
-      // Silently fail — we'll retry on next user gesture
+      console.warn('[AudioManager] warmUp failed');
     }
   }
 
@@ -78,6 +83,17 @@ export class AudioManager {
         // Already stopped
       }
       this.currentSource = null;
+    }
+
+    // Stop current HTML Audio playback
+    if (this.currentHtmlAudio) {
+      try {
+        this.currentHtmlAudio.pause();
+        this.currentHtmlAudio.src = '';
+      } catch {
+        // Already stopped
+      }
+      this.currentHtmlAudio = null;
     }
 
     // Cancel any browser TTS in progress
@@ -104,6 +120,17 @@ export class AudioManager {
         // Already stopped
       }
       this.currentSource = null;
+    }
+
+    // Stop current HTML Audio playback
+    if (this.currentHtmlAudio) {
+      try {
+        this.currentHtmlAudio.pause();
+        this.currentHtmlAudio.src = '';
+      } catch {
+        // Already stopped
+      }
+      this.currentHtmlAudio = null;
     }
 
     // Cancel any browser TTS in progress
@@ -222,12 +249,14 @@ export class AudioManager {
           const audioBuffer = await requestTTS(sentence, voiceConfig);
           if (this.interrupted) return;
           await this.playAudioBuffer(audioBuffer);
-        } catch {
+        } catch (e) {
+          console.warn('[AudioManager] TTS+playback failed for sentence:', e);
           if (this.interrupted) return;
-          // ElevenLabs failed, try browser TTS
+          // ElevenLabs or Web Audio failed, try browser TTS
           try {
             await speakWithBrowserTTS(sentence);
-          } catch {
+          } catch (e2) {
+            console.warn('[AudioManager] Fallback TTS also failed:', e2);
             // Complete silence fallback
           }
         }
@@ -280,30 +309,90 @@ export class AudioManager {
     });
   }
 
-  private async playAudioBuffer(buffer: ArrayBuffer): Promise<void> {
-    const ctx = await this.getAudioContext();
-    const audioBuffer = await ctx.decodeAudioData(buffer);
+  /**
+   * Play an MP3 ArrayBuffer using an HTML Audio element.
+   * This bypasses Web Audio API's decodeAudioData entirely,
+   * which is more reliable on iOS where AudioContext may be suspended.
+   */
+  private playWithHtmlAudio(buffer: ArrayBuffer): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        const blob = new Blob([buffer], { type: 'audio/mpeg' });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.volume = 0.85;
 
-    return new Promise<void>((resolve) => {
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
-      this.currentSource = source;
+        this.currentHtmlAudio = audio;
 
-      // Set volume lower to not compete with music
-      const gainNode = ctx.createGain();
-      gainNode.gain.value = 0.85;
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          if (this.currentHtmlAudio === audio) {
+            this.currentHtmlAudio = null;
+          }
+          resolve();
+        };
 
-      source.connect(gainNode);
-      gainNode.connect(ctx.destination);
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          if (this.currentHtmlAudio === audio) {
+            this.currentHtmlAudio = null;
+          }
+          console.warn('[AudioManager] HTML Audio playback error');
+          reject(new Error('HTML Audio playback failed'));
+        };
 
-      source.onended = () => {
-        if (this.currentSource === source) {
-          this.currentSource = null;
-        }
-        resolve();
-      };
-      source.start(0);
+        audio.play().catch((e) => {
+          URL.revokeObjectURL(url);
+          if (this.currentHtmlAudio === audio) {
+            this.currentHtmlAudio = null;
+          }
+          console.warn('[AudioManager] HTML Audio play() rejected:', e);
+          reject(e);
+        });
+      } catch (e) {
+        reject(e);
+      }
     });
+  }
+
+  private async playAudioBuffer(buffer: ArrayBuffer): Promise<void> {
+    // On iOS with AudioContext not unlocked, go straight to HTML Audio
+    if (isIOS() && !isAudioUnlocked()) {
+      console.warn('[AudioManager] iOS + AudioContext not unlocked, using HTML Audio');
+      return this.playWithHtmlAudio(buffer);
+    }
+
+    // Try Web Audio API first, fall back to HTML Audio on failure
+    try {
+      const ctx = await this.getAudioContext();
+      // Clone buffer before decodeAudioData — it may detach the ArrayBuffer
+      const bufferCopy = buffer.slice(0);
+      const audioBuffer = await ctx.decodeAudioData(bufferCopy);
+
+      return new Promise<void>((resolve) => {
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        this.currentSource = source;
+
+        // Set volume lower to not compete with music
+        const gainNode = ctx.createGain();
+        gainNode.gain.value = 0.85;
+
+        source.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        source.onended = () => {
+          if (this.currentSource === source) {
+            this.currentSource = null;
+          }
+          resolve();
+        };
+        source.start(0);
+      });
+    } catch (e) {
+      console.warn('[AudioManager] Web Audio playback failed, trying HTML Audio:', e);
+      return this.playWithHtmlAudio(buffer);
+    }
   }
 
   setMuted(muted: boolean): void {
@@ -319,10 +408,8 @@ export class AudioManager {
 
   destroy(): void {
     this.interrupt();
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-    }
+    destroySharedContext();
+    this.audioContext = null;
     if (this.visibilityHandler && typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.visibilityHandler);
       this.visibilityHandler = null;

@@ -101,10 +101,12 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **`context-builder.ts`** — Assembles CoachingContext from run state + collective + coaching history
 - **`coach-client.ts`** — Streams Claude response, splits into sentences at `.!?` boundaries
 - **`prompts.ts`** — System prompts for 4 personas + 6 trigger prompts + voice configs
-- **`audio-manager.ts`** — Playback queue (max 2), interrupt/pause/resume support, sentence-level TTS streaming
+- **`audio-manager.ts`** — Playback queue (max 2), interrupt/pause/resume support, sentence-level TTS streaming. Four-layer fallback: Web Audio API → HTML `<audio>` element → SpeechSynthesis → silence.
 - **`tts-client.ts`** — Calls `/api/tts`, returns ArrayBuffer per sentence
-- **`fallback-tts.ts`** — Browser SpeechSynthesis when ElevenLabs fails
+- **`fallback-tts.ts`** — Browser SpeechSynthesis when ElevenLabs fails. Async voice loading for iOS.
 - **`voice-input.ts`** — Web Speech API wrapper for runner voice commands
+- **`audio-unlock.ts`** — Shared AudioContext singleton that survives client-side navigation. Unlocked during user gesture on setup page GO button. Required for iOS audio playback.
+- **`platform.ts`** — iOS detection utility (`isIOS()`). Handles iPad-as-Mac user agent.
 
 ### GPS (`src/lib/gps/`)
 - **`tracker.ts`** — `watchPosition` with accuracy < 30m filter
@@ -147,7 +149,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **Streaming responses**: `/api/coach` and `/api/tts` both stream. Don't buffer full responses.
 
 ### Testing
-- **247 tests** across 22 test files. All must pass before pushing.
+- **267 tests** across 25 test files. All must pass before pushing.
 - **Ask before deleting any tests.** User's explicit standing instruction.
 - Run: `npx vitest run`
 - Build: `npx next build`
@@ -236,6 +238,8 @@ OPENWEATHER_API_KEY        — Weather data (unused currently)
 
 6. **Exclusionary pace labels**: Old PaceSelector had labels like "Easy" at 6:30/km and maxed at 6:30, alienating slower runners. Redesigned with inclusive labels ("Competitive" → "Easy Going"), extended range to 10:00/km, slider with visual bars, and "No target — just run" option. Goal: encourage everyone to run more.
 
+8. **Silent voice coaching on iOS** (Safari PWA + Chrome on iOS): AudioContext was created in timer callback (not user gesture), so iOS kept it suspended. `decodeAudioData()` failed silently, and the SpeechSynthesis fallback also failed because `getVoices()` returns empty array on iOS (voices load async). Fixed by: (a) creating `audio-unlock.ts` — a shared AudioContext singleton unlocked during the setup page GO button tap (a real user gesture), (b) adding HTML `<audio>` element as second fallback in `audio-manager.ts` that bypasses Web Audio API entirely, (c) rewriting `fallback-tts.ts` to wait for `voiceschanged` event, reject on errors (was resolving), and add stuck-speech timeout, (d) adding `platform.ts` for iOS detection including iPad-as-Mac. Playback chain: Web Audio API → HTML Audio → SpeechSynthesis → silence.
+
 7. **Magic link redirected to localhost**: Login page used `window.location.origin` for the magic link redirect URL, which resolved to `http://localhost:3000` in dev. In production, Supabase needs the production URL whitelisted. Fixed by: (a) adding `getSiteUrl()` helper that prioritizes `NEXT_PUBLIC_SITE_URL` env var > `NEXT_PUBLIC_VERCEL_URL` > `window.location.origin`, (b) using `getSiteUrl()` in both login page and callback route, (c) adding `NEXT_PUBLIC_SITE_URL` env var. Also fixed: no sign-up flow (unified login/signup page), no sign-out button (added dropdown menu on home page + sign-out on profile page), "Welcome Back" copy alienated new users (changed to "Join the Run").
 
 ## Definition of Done (Engineering Standards)
@@ -243,7 +247,7 @@ OPENWEATHER_API_KEY        — Weather data (unused currently)
 Every feature implementation must complete ALL of the following before being considered done:
 
 ### Code Quality
-1. **All existing tests pass** — Run `npx vitest run` (currently 231+ tests across 19+ files)
+1. **All existing tests pass** — Run `npx vitest run` (currently 267 tests across 25 files)
 2. **Clean build** — Run `npx next build` with zero errors and zero warnings
 3. **No regressions** — Verify the change doesn't break existing functionality
 4. **Ask before deleting tests** — User's explicit standing instruction

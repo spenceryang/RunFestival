@@ -20,6 +20,34 @@ vi.mock('@/lib/audio/tts-usage-tracker', () => ({
   },
 }));
 
+vi.mock('@/lib/audio/audio-unlock', () => {
+  const mockCtx = {
+    state: 'running',
+    sampleRate: 44100,
+    destination: {},
+    resume: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+    createBuffer: vi.fn().mockReturnValue({}),
+    createBufferSource: vi.fn().mockReturnValue({
+      buffer: null,
+      connect: vi.fn(),
+      start: vi.fn(),
+    }),
+    decodeAudioData: vi.fn(),
+    createGain: vi.fn(),
+  };
+  return {
+    getSharedAudioContext: vi.fn().mockReturnValue(mockCtx),
+    unlockAudioContext: vi.fn().mockResolvedValue(true),
+    isAudioUnlocked: vi.fn().mockReturnValue(true),
+    destroySharedContext: vi.fn(),
+  };
+});
+
+vi.mock('@/lib/audio/platform', () => ({
+  isIOS: vi.fn().mockReturnValue(false),
+}));
+
 // Mock AudioContext
 const mockClose = vi.fn();
 const mockResume = vi.fn().mockResolvedValue(undefined);

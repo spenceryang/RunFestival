@@ -10,6 +10,7 @@ import { useRunStore } from '@/lib/store/run-store';
 import { useUserStore } from '@/lib/store/user-store';
 import { createRunRecord } from '@/lib/services/run-persistence';
 import { getGuestName, setGuestName } from '@/lib/guest-name';
+import { unlockAudioContext } from '@/lib/audio/audio-unlock';
 import type { CoachingPersona } from '@/types/run';
 
 export default function SetupPage() {
@@ -47,6 +48,12 @@ export default function SetupPage() {
     if (!user && guestName.trim()) {
       setGuestName(guestName.trim());
     }
+
+    // CRITICAL: Unlock AudioContext during this user gesture (GO tap).
+    // On iOS, AudioContext must be activated within a tap handler.
+    // This runs BEFORE navigation so it's within the gesture context.
+    // The shared AudioContext persists across client-side navigation.
+    await unlockAudioContext();
 
     startRun({
       targetDistanceMeters: distance,

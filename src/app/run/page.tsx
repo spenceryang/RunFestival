@@ -22,6 +22,7 @@ import { useUserStore } from '@/lib/store/user-store';
 import { generateStoryPlan } from '@/lib/agents/story-curator';
 import { shouldReview, reviewCoachingMessage, formatQualityFeedback } from '@/lib/agents/quality-supervisor';
 import { formatPace } from '@/lib/gps/pace';
+import { isAudioUnlocked } from '@/lib/audio/audio-unlock';
 
 export default function RunPageWrapper() {
   return (
@@ -161,8 +162,12 @@ function RunPage() {
     audioManagerRef.current.onActiveChange(setIsCoaching);
     voiceInputRef.current = new VoiceInput();
 
-    // Warm up AudioContext on first user gesture (required on iOS/Android).
-    // AudioContext must be created/resumed during a tap — timer callbacks won't work.
+    // Attempt immediate warmUp — works if AudioContext was pre-unlocked
+    // from setup page's GO button (the primary iOS unlock path).
+    audioManagerRef.current.warmUp();
+
+    // Also register gesture-based warmUp as backup — covers cases where
+    // user navigates directly to /run (e.g., demo/dev mode, deep link).
     const warmUpOnGesture = () => {
       audioManagerRef.current?.warmUp();
     };
@@ -203,6 +208,9 @@ function RunPage() {
       prevSnapshotRef.current = { ...currentState };
 
       if (trigger) {
+        if (!isAudioUnlocked()) {
+          console.warn('[RunPage] AudioContext not unlocked before coaching trigger:', trigger.type);
+        }
         const collectiveState = useCollectiveStore.getState();
         const coachingState = useCoachingStore.getState();
         const qualityFeedback = formatQualityFeedback(coachingState.qualityReviews);
