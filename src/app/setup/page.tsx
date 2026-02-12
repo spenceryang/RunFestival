@@ -43,17 +43,18 @@ export default function SetupPage() {
     }
   }, [user]);
 
-  const handleGo = async () => {
+  const handleGo = () => {
     // Save guest name if provided
     if (!user && guestName.trim()) {
       setGuestName(guestName.trim());
     }
 
     // CRITICAL: Unlock AudioContext during this user gesture (GO tap).
-    // On iOS, AudioContext must be activated within a tap handler.
-    // This runs BEFORE navigation so it's within the gesture context.
-    // The shared AudioContext persists across client-side navigation.
-    await unlockAudioContext();
+    // On iOS, AudioContext MUST be activated within the synchronous
+    // call stack of a user gesture handler. Any `await` before this
+    // exits the gesture context and iOS will keep AudioContext suspended.
+    // Do NOT add any `await` before this line.
+    unlockAudioContext();
 
     startRun({
       targetDistanceMeters: distance,
@@ -61,17 +62,18 @@ export default function SetupPage() {
       persona,
     });
 
-    // Create run record in Supabase if authenticated
+    // Create run record in Supabase if authenticated — fire and forget.
+    // MUST NOT await this: the network call would delay router.push()
+    // and exit the iOS gesture context, preventing audio unlock.
     if (user) {
-      const runId = await createRunRecord({
+      createRunRecord({
         userId: user.id,
         targetDistanceMeters: distance,
         targetPaceSecondsPerKm: pace,
         persona,
+      }).then((runId) => {
+        if (runId) setRunId(runId);
       });
-      if (runId) {
-        setRunId(runId);
-      }
     }
 
     router.push('/run');

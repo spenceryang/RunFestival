@@ -28,6 +28,19 @@ Object.defineProperty(globalThis, 'AudioContext', {
   configurable: true,
 });
 
+// Mock HTML Audio element
+class MockHTMLAudio {
+  volume = 1;
+  src = '';
+  play = vi.fn().mockResolvedValue(undefined);
+}
+
+Object.defineProperty(globalThis, 'Audio', {
+  value: MockHTMLAudio,
+  writable: true,
+  configurable: true,
+});
+
 describe('audio-unlock', () => {
   beforeEach(() => {
     vi.resetModules();

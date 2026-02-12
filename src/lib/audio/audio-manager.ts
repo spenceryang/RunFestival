@@ -216,8 +216,9 @@ export class AudioManager {
 
     try {
       await this.processCoachingRequest(next.context, voiceConfig, next.onMessageComplete);
-    } catch {
-      // Audio error — fall back silently per CLAUDE.md
+    } catch (e) {
+      // Audio error — fall back silently per CLAUDE.md (no user-facing error)
+      console.warn('[AudioManager] processCoachingRequest failed:', e);
     }
 
     // Process next in queue (unless interrupted)
@@ -302,7 +303,8 @@ export class AudioManager {
             processQueue();
           }
         },
-        () => {
+        (error) => {
+          console.warn('[AudioManager] Coach streaming error:', error);
           resolve(); // On error, just resolve to continue
         }
       );
@@ -356,13 +358,20 @@ export class AudioManager {
   }
 
   private async playAudioBuffer(buffer: ArrayBuffer): Promise<void> {
-    // On iOS with AudioContext not unlocked, go straight to HTML Audio
-    if (isIOS() && !isAudioUnlocked()) {
-      console.warn('[AudioManager] iOS + AudioContext not unlocked, using HTML Audio');
-      return this.playWithHtmlAudio(buffer);
+    // On iOS, ALWAYS try HTML Audio first — it's more reliable than
+    // Web Audio API because it doesn't depend on AudioContext state.
+    // AudioContext can silently suspend between user gestures on iOS,
+    // causing decodeAudioData to fail or produce silence.
+    if (isIOS()) {
+      try {
+        return await this.playWithHtmlAudio(buffer);
+      } catch (e) {
+        console.warn('[AudioManager] iOS HTML Audio failed, trying Web Audio:', e);
+        // Fall through to Web Audio as backup
+      }
     }
 
-    // Try Web Audio API first, fall back to HTML Audio on failure
+    // Non-iOS: Try Web Audio API first, fall back to HTML Audio on failure
     try {
       const ctx = await this.getAudioContext();
       // Clone buffer before decodeAudioData — it may detach the ArrayBuffer

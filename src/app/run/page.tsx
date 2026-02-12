@@ -166,12 +166,16 @@ function RunPage() {
     // from setup page's GO button (the primary iOS unlock path).
     audioManagerRef.current.warmUp();
 
-    // Also register gesture-based warmUp as backup — covers cases where
-    // user navigates directly to /run (e.g., demo/dev mode, deep link).
+    // Register gesture-based warmUp on EVERY tap — not just the first.
+    // On iOS, if the first warmUp didn't fully unlock (e.g., direct
+    // navigation to /run, or AudioContext was garbage collected), each
+    // subsequent tap should retry. Using { once: false } ensures this.
     const warmUpOnGesture = () => {
-      audioManagerRef.current?.warmUp();
+      if (!isAudioUnlocked()) {
+        audioManagerRef.current?.warmUp();
+      }
     };
-    document.addEventListener('pointerdown', warmUpOnGesture, { once: true });
+    document.addEventListener('pointerdown', warmUpOnGesture);
 
     // Evaluate triggers every 3 seconds
     triggerIntervalRef.current = setInterval(() => {

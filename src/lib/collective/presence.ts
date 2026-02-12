@@ -58,11 +58,22 @@ export function joinPresence(runner: {
   cityChannel.on('presence', { event: 'sync' }, () => {
     const state = cityChannel!.presenceState();
     const cityCount = Object.keys(state).length;
+    console.warn('[Presence] sync — city count:', cityCount, 'keys:', Object.keys(state));
     // City count is a minimum — global stats add to this
     const store = useCollectiveStore.getState();
     const globalTotal = store.runnerCount;
     // Use whichever is larger (global may not have updated yet)
-    useCollectiveStore.getState().setRunnerCount(Math.max(cityCount, globalTotal));
+    // Ensure at least 1 (the current runner) when we're subscribed
+    useCollectiveStore.getState().setRunnerCount(Math.max(cityCount, globalTotal, 1));
+  });
+
+  // Also listen for join events to catch when we join
+  cityChannel.on('presence', { event: 'join' }, ({ newPresences }) => {
+    console.warn('[Presence] join event:', newPresences?.length, 'new presences');
+    const state = cityChannel!.presenceState();
+    const cityCount = Object.keys(state).length;
+    const store = useCollectiveStore.getState();
+    useCollectiveStore.getState().setRunnerCount(Math.max(cityCount, store.runnerCount, 1));
   });
 
   // Listen for broadcast events (milestones)
@@ -76,6 +87,12 @@ export function joinPresence(runner: {
 
   cityChannel.subscribe(async (status) => {
     if (status === 'SUBSCRIBED') {
+      console.warn('[Presence] Subscribed to city channel:', citySlug);
+      // Immediately set runner count to at least 1 (ourselves)
+      const store = useCollectiveStore.getState();
+      if (store.runnerCount === 0) {
+        store.setRunnerCount(1);
+      }
       await cityChannel!.track({
         user_id: runner.userId,
         display_name: runner.displayName,
@@ -84,6 +101,10 @@ export function joinPresence(runner: {
         distance_meters: 0,
         current_pace: 0,
       } satisfies PresencePayload);
+    } else if (status === 'CHANNEL_ERROR') {
+      console.warn('[Presence] Channel error — setting fallback runner count');
+      // If Supabase Realtime fails, still show at least 1 runner (ourselves)
+      useCollectiveStore.getState().setRunnerCount(1);
     }
   });
 

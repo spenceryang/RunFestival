@@ -27,30 +27,63 @@ export function getSharedAudioContext(): AudioContext {
  * Unlock the AudioContext by resuming it and playing a short silent buffer.
  * MUST be called from a user gesture handler (tap/click).
  *
+ * IMPORTANT: This function does all critical work SYNCHRONOUSLY within
+ * the gesture context. The returned promise resolves when resume() completes,
+ * but the AudioContext is already being unlocked by the time this returns.
+ * Callers do NOT need to await this — calling it synchronously is fine.
+ *
  * On iOS, calling resume() alone is sometimes not sufficient — playing
  * a buffer within the gesture callback fully activates the audio session.
  */
-export async function unlockAudioContext(): Promise<boolean> {
+export function unlockAudioContext(): Promise<boolean> {
   try {
     const ctx = getSharedAudioContext();
 
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
-    }
+    // CRITICAL: Call resume() synchronously within the gesture handler.
+    // iOS WebKit checks the call stack to verify user gesture context.
+    // Do NOT await this before playing the silent buffer.
+    const resumePromise = ctx.state === 'suspended'
+      ? ctx.resume()
+      : Promise.resolve();
 
     // Play a tiny silent buffer to fully unlock on iOS.
     // Some iOS versions require actual audio output within the gesture.
-    const silentBuffer = ctx.createBuffer(1, 1, ctx.sampleRate);
-    const source = ctx.createBufferSource();
-    source.buffer = silentBuffer;
-    source.connect(ctx.destination);
-    source.start(0);
+    // This MUST happen synchronously (same call stack as the gesture).
+    try {
+      const silentBuffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const source = ctx.createBufferSource();
+      source.buffer = silentBuffer;
+      source.connect(ctx.destination);
+      source.start(0);
+    } catch (e) {
+      console.warn('[AudioUnlock] Silent buffer play failed:', e);
+    }
+
+    // Also create and play a silent HTML Audio element — this unlocks
+    // the HTML Audio path on iOS independently of AudioContext.
+    try {
+      const silentAudio = new Audio(
+        'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwmHAAAAAAD/+1DEAAAHAAGf9AAAIiSAM/8xIAAAAwAAA/gAAABEREREREREREREREREREREREREREREAAAAAAAAAAAAMQxDEMQxDEAAAAAAAAAAAAMQxDEMQxDEMQxDEMQxDEMQxDEMQxDAAAAAAD/+1DELgAADSAAAAAAAAANIAAAAABEREREREREREREREREREREREREREREREREAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      );
+      silentAudio.volume = 0.01;
+      silentAudio.play().catch(() => {});
+    } catch {
+      // HTML Audio pre-play failed — non-critical
+    }
 
     console.warn('[AudioUnlock] state after unlock:', ctx.state);
-    return ctx.state === 'running';
+
+    // Return a promise that resolves after resume completes
+    return resumePromise.then(() => {
+      console.warn('[AudioUnlock] resume complete, state:', ctx.state);
+      return ctx.state === 'running';
+    }).catch((e) => {
+      console.warn('[AudioUnlock] resume failed:', e);
+      return false;
+    });
   } catch (e) {
     console.warn('[AudioUnlock] Failed to unlock:', e);
-    return false;
+    return Promise.resolve(false);
   }
 }
 
