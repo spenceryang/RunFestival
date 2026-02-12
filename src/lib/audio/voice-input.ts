@@ -5,6 +5,7 @@ type VoiceErrorCallback = (error: string) => void;
 export class VoiceInput {
   private recognition: SpeechRecognition | null = null;
   private _isListening = false;
+  private hasCompleted = false;
 
   static isSupported(): boolean {
     if (typeof window === 'undefined') return false;
@@ -26,6 +27,7 @@ export class VoiceInput {
     const SpeechRecognitionCtor =
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
+    this.hasCompleted = false;
     this.recognition = new SpeechRecognitionCtor();
     this.recognition.continuous = false;
     this.recognition.interimResults = false;
@@ -43,13 +45,19 @@ export class VoiceInput {
       const errorType = event.error || 'unknown';
       console.warn('[VoiceInput] SpeechRecognition error:', errorType, event.message);
       this._isListening = false;
-      onError?.(errorType);
-      onEnd();
+      if (!this.hasCompleted) {
+        this.hasCompleted = true;
+        onError?.(errorType);
+        onEnd();
+      }
     };
 
     this.recognition.onend = () => {
       this._isListening = false;
-      onEnd();
+      if (!this.hasCompleted) {
+        this.hasCompleted = true;
+        onEnd();
+      }
     };
 
     try {
@@ -60,7 +68,6 @@ export class VoiceInput {
     } catch (e) {
       console.warn('[VoiceInput] Failed to start:', e);
       this._isListening = false;
-      onError?.('start-failed');
       return false;
     }
   }

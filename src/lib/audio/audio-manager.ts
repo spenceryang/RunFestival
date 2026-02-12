@@ -326,6 +326,11 @@ export class AudioManager {
         const blob = new Blob([buffer], { type: 'audio/mpeg' });
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
+        // iOS WebKit: keep playback inline and eager-load metadata.
+        audio.playsInline = true;
+        audio.setAttribute('playsinline', 'true');
+        audio.setAttribute('webkit-playsinline', 'true');
+        audio.preload = 'auto';
         audio.volume = 0.85;
 
         this.currentHtmlAudio = audio;

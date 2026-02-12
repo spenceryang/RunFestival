@@ -22,6 +22,7 @@ import { generateStoryPlan } from '@/lib/agents/story-curator';
 import { shouldReview, reviewCoachingMessage, formatQualityFeedback } from '@/lib/agents/quality-supervisor';
 import { formatPace } from '@/lib/gps/pace';
 import { isAudioUnlocked } from '@/lib/audio/audio-unlock';
+import { isIOS } from '@/lib/audio/platform';
 
 export default function RunPageWrapper() {
   return (
@@ -175,6 +176,7 @@ function RunPage() {
       }
     };
     document.addEventListener('pointerdown', warmUpOnGesture);
+    document.addEventListener('touchstart', warmUpOnGesture);
 
     // Evaluate triggers every 3 seconds
     triggerIntervalRef.current = setInterval(() => {
@@ -244,6 +246,7 @@ function RunPage() {
 
     return () => {
       document.removeEventListener('pointerdown', warmUpOnGesture);
+      document.removeEventListener('touchstart', warmUpOnGesture);
       if (triggerIntervalRef.current) clearInterval(triggerIntervalRef.current);
       triggerEngineRef.current?.reset();
       audioManagerRef.current?.destroy();
@@ -321,6 +324,12 @@ function RunPage() {
     // Warm up AudioContext on user gesture — ensures it's ready for playback
     audioManagerRef.current?.warmUp();
 
+    // iOS is sensitive to shared audio session conflicts.
+    // Stop coach playback before trying to open the mic.
+    if (isIOS()) {
+      audioManagerRef.current?.interrupt();
+    }
+
     // If already listening, stop and fall back to regular coach trigger
     if (voiceInputRef.current?.isListening) {
       voiceInputRef.current.stop();
@@ -342,8 +351,12 @@ function RunPage() {
           // Voice input failed — log and fall through to sendToCoach
           console.warn('[RunPage] Voice input error:', error);
           setIsListening(false);
-          // Automatically ask coach without voice when mic fails
-          sendToCoach();
+          // Do not auto-trigger coaching when permission/gesture/no-speech errors occur;
+          // users perceive this as "mic ignored me" on iOS.
+          const canFallbackToCoach = error === 'not-supported' || error === 'start-failed';
+          if (canFallbackToCoach) {
+            sendToCoach();
+          }
         }
       );
 
