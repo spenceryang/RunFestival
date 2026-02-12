@@ -48,10 +48,13 @@ export default function RecapPage() {
   }, [store.distanceMeters, store.elapsedSeconds, store.averagePaceSecondsPerKm, store.persona, store.runId, user, addTimelineRun]);
 
   // Fallback: persist run for authenticated users who lost their runId
-  // (e.g., createRunRecord failed during setup, or demo→recap flow)
+  // (e.g., createRunRecord failed during setup)
   useEffect(() => {
     if (persistedRef.current) return;
-    if (!user || store.runId) return; // Already has a runId or not authenticated
+    if (!user || store.runId) {
+      console.warn('[Recap] Persistence check — user:', !!user, 'runId:', store.runId);
+      return;
+    }
     if (store.distanceMeters <= 0 || store.elapsedSeconds <= 0) return;
     persistedRef.current = true;
 

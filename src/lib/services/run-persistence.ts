@@ -41,9 +41,10 @@ export async function createRunRecord(params: CreateRunParams): Promise<string |
       .single();
 
     if (error) {
-      console.warn('Failed to create run record:', error.message);
+      console.warn('[RunPersistence] Failed to create run record:', error.message);
       return null;
     }
+    console.warn('[RunPersistence] Created run record:', data.id);
     return data.id;
   } catch {
     console.warn('Failed to create run record: network error');
@@ -77,12 +78,13 @@ export async function completeRunRecord(params: CompleteRunParams): Promise<bool
       .eq('id', params.runId);
 
     if (error) {
-      console.warn('Failed to complete run record:', error.message);
+      console.warn('[RunPersistence] Failed to complete run record:', error.message);
       return false;
     }
+    console.warn('[RunPersistence] Completed run record:', params.runId);
     return true;
   } catch {
-    console.warn('Failed to complete run record: network error');
+    console.warn('[RunPersistence] Failed to complete run record: network error');
     return false;
   }
 }

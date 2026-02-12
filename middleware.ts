@@ -2,12 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
 export async function middleware(request: NextRequest) {
-  const { pathname, searchParams } = request.nextUrl;
-
-  // Demo mode bypasses auth
-  if (searchParams.get('demo') === 'true') {
-    return NextResponse.next();
-  }
+  const { pathname } = request.nextUrl;
 
   // Dev mode bypasses auth
   if (pathname.startsWith('/dev')) {

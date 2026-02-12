@@ -2,6 +2,8 @@ import type { PersonaVoiceConfig } from '@/types/coach';
 import { getApiHeaders } from '@/lib/auth/demo-headers';
 import { ttsUsageTracker } from './tts-usage-tracker';
 
+const TTS_TIMEOUT_MS = 15_000; // 15 second timeout for TTS requests
+
 /**
  * Request TTS audio from ElevenLabs via our proxy endpoint.
  * Returns the audio as an ArrayBuffer for playback.
@@ -23,25 +25,37 @@ export async function requestTTS(
     throw new Error(`TTS blocked: ${check.reason}`);
   }
 
-  const response = await fetch('/api/tts', {
-    method: 'POST',
-    headers: getApiHeaders(),
-    body: JSON.stringify({
-      text,
-      voiceId: voiceConfig.elevenLabsVoiceId,
-      stability: voiceConfig.stability,
-      similarity: voiceConfig.similarity,
-      style: voiceConfig.style,
-      speed: voiceConfig.speed,
-    }),
-  });
+  console.warn('[TTS] Requesting:', text.slice(0, 50) + (text.length > 50 ? '...' : ''));
 
-  if (!response.ok) {
-    throw new Error(`TTS API error: ${response.status}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TTS_TIMEOUT_MS);
+
+  try {
+    const response = await fetch('/api/tts', {
+      method: 'POST',
+      headers: getApiHeaders(),
+      signal: controller.signal,
+      body: JSON.stringify({
+        text,
+        voiceId: voiceConfig.elevenLabsVoiceId,
+        stability: voiceConfig.stability,
+        similarity: voiceConfig.similarity,
+        style: voiceConfig.style,
+        speed: voiceConfig.speed,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`TTS API error: ${response.status}`);
+    }
+
+    // Record successful request
+    ttsUsageTracker.recordRequest(text.length);
+
+    const buffer = await response.arrayBuffer();
+    console.warn('[TTS] Received audio:', buffer.byteLength, 'bytes');
+    return buffer;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  // Record successful request
-  ttsUsageTracker.recordRequest(text.length);
-
-  return response.arrayBuffer();
 }

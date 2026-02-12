@@ -13,6 +13,7 @@ export async function streamCoachingMessage(
   onError: (error: Error) => void
 ): Promise<void> {
   try {
+    console.warn('[Coach] Streaming request — trigger:', context.trigger.type, 'persona:', context.persona);
     const response = await fetch('/api/coach', {
       method: 'POST',
       headers: getApiHeaders(),
@@ -20,6 +21,8 @@ export async function streamCoachingMessage(
     });
 
     if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      console.warn('[Coach] API error:', response.status, errorBody.slice(0, 200));
       throw new Error(`Coach API error: ${response.status}`);
     }
 
@@ -79,8 +82,10 @@ export async function streamCoachingMessage(
       onSentence(fullText.trim());
     }
 
+    console.warn('[Coach] Stream complete — total length:', collectedFullText.length);
     onComplete(collectedFullText);
   } catch (error) {
+    console.warn('[Coach] Stream error:', error);
     onError(error instanceof Error ? error : new Error(String(error)));
   }
 }

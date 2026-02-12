@@ -2,7 +2,7 @@ import { useUserStore } from '@/lib/store/user-store';
 
 /**
  * Returns headers to send with API requests.
- * In demo mode (no authenticated user), adds X-Demo-Mode header
+ * When not authenticated (dev mode), adds X-Demo-Mode header
  * so the API routes skip auth validation.
  */
 export function getApiHeaders(): Record<string, string> {

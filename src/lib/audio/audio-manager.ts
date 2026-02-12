@@ -247,14 +247,18 @@ export class AudioManager {
       const playSentence = async (sentence: string) => {
         if (this.interrupted) return;
         try {
+          console.warn('[AudioManager] Playing sentence:', sentence.slice(0, 40) + '...');
           const audioBuffer = await requestTTS(sentence, voiceConfig);
           if (this.interrupted) return;
+          console.warn('[AudioManager] Audio buffer ready, playing...');
           await this.playAudioBuffer(audioBuffer);
+          console.warn('[AudioManager] Sentence playback complete');
         } catch (e) {
           console.warn('[AudioManager] TTS+playback failed for sentence:', e);
           if (this.interrupted) return;
           // ElevenLabs or Web Audio failed, try browser TTS
           try {
+            console.warn('[AudioManager] Trying browser TTS fallback...');
             await speakWithBrowserTTS(sentence);
           } catch (e2) {
             console.warn('[AudioManager] Fallback TTS also failed:', e2);
@@ -326,7 +330,18 @@ export class AudioManager {
 
         this.currentHtmlAudio = audio;
 
+        // Safety timeout — if audio doesn't end within 30s, resolve anyway
+        const safetyTimeout = setTimeout(() => {
+          console.warn('[AudioManager] HTML Audio safety timeout — resolving');
+          URL.revokeObjectURL(url);
+          if (this.currentHtmlAudio === audio) {
+            this.currentHtmlAudio = null;
+          }
+          resolve();
+        }, 30_000);
+
         audio.onended = () => {
+          clearTimeout(safetyTimeout);
           URL.revokeObjectURL(url);
           if (this.currentHtmlAudio === audio) {
             this.currentHtmlAudio = null;
@@ -335,6 +350,7 @@ export class AudioManager {
         };
 
         audio.onerror = () => {
+          clearTimeout(safetyTimeout);
           URL.revokeObjectURL(url);
           if (this.currentHtmlAudio === audio) {
             this.currentHtmlAudio = null;
@@ -343,7 +359,11 @@ export class AudioManager {
           reject(new Error('HTML Audio playback failed'));
         };
 
-        audio.play().catch((e) => {
+        console.warn('[AudioManager] HTML Audio play() called, buffer:', buffer.byteLength, 'bytes');
+        audio.play().then(() => {
+          console.warn('[AudioManager] HTML Audio play() resolved, duration:', audio.duration);
+        }).catch((e) => {
+          clearTimeout(safetyTimeout);
           URL.revokeObjectURL(url);
           if (this.currentHtmlAudio === audio) {
             this.currentHtmlAudio = null;

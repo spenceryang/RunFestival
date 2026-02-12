@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useRunStore } from '@/lib/store/run-store';
 import { useCollectiveStore } from '@/lib/store/collective-store';
 import { RunScreen } from '@/components/run/RunScreen';
-import { DemoRunScreen } from '@/components/run/DemoRunScreen';
 import { DevRunScreen } from '@/components/run/DevRunScreen';
 import { CoachingTriggerEngine } from '@/lib/coach/trigger-engine';
 import { buildCoachingContext } from '@/lib/coach/context-builder';
@@ -35,7 +34,6 @@ export default function RunPageWrapper() {
 function RunPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const isDemo = searchParams.get('demo') === 'true';
   const isDev = searchParams.get('dev') === 'true';
   const store = useRunStore();
   const triggerEngineRef = useRef<CoachingTriggerEngine | null>(null);
@@ -156,6 +154,7 @@ function RunPage() {
     if (status !== 'running' && status !== 'paused') return;
 
     coachingInitializedRef.current = true;
+    console.warn('[RunPage] Initializing coaching pipeline, audioUnlocked:', isAudioUnlocked());
 
     triggerEngineRef.current = new CoachingTriggerEngine();
     audioManagerRef.current = new AudioManager();
@@ -212,8 +211,10 @@ function RunPage() {
       prevSnapshotRef.current = { ...currentState };
 
       if (trigger) {
+        console.warn('[RunPage] Trigger fired:', trigger.type, 'elapsed:', currentState.elapsedSeconds, 'audioUnlocked:', isAudioUnlocked());
         if (!isAudioUnlocked()) {
-          console.warn('[RunPage] AudioContext not unlocked before coaching trigger:', trigger.type);
+          console.warn('[RunPage] AudioContext not unlocked — attempting warmUp before enqueue');
+          audioManagerRef.current?.warmUp();
         }
         const collectiveState = useCollectiveStore.getState();
         const coachingState = useCoachingStore.getState();
@@ -365,17 +366,6 @@ function RunPage() {
     }
     return (
       <DevRunScreen
-        onFinish={handleFinish}
-        onTalkToCoach={handleTalkToCoach}
-        isListening={isListening}
-        isCoaching={isCoaching}
-      />
-    );
-  }
-
-  if (isDemo) {
-    return (
-      <DemoRunScreen
         onFinish={handleFinish}
         onTalkToCoach={handleTalkToCoach}
         isListening={isListening}

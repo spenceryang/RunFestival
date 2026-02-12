@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Auth check — skip for demo mode
+  // Auth check — skip for dev mode (unauthenticated)
   if (request.headers.get('x-demo-mode') !== 'true') {
     const supabase = createEdgeSupabaseClient(request);
     const { data: { user } } = await supabase.auth.getUser();

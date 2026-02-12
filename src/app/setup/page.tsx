@@ -72,6 +72,7 @@ export default function SetupPage() {
         targetPaceSecondsPerKm: pace,
         persona,
       }).then((runId) => {
+        console.warn('[Setup] createRunRecord result:', runId);
         if (runId) setRunId(runId);
       });
     }

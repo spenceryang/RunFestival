@@ -82,11 +82,11 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **`quality-supervisor.ts`** — Reviews every 3rd coaching message via Opus 4.6. Non-blocking.
 
 ### Auth (`src/lib/auth/` + `src/app/auth/` + `middleware.ts`)
-- **`middleware.ts`** — Protects /setup, /run, /recap, /profile. Bypasses auth for ?demo=true.
+- **`middleware.ts`** — Protects /setup, /run, /recap, /profile. Bypasses auth for dev mode.
 - **`auth/login/page.tsx`** — Unified login/signup via magic link (Supabase OTP). Uses `getSiteUrl()` for redirect URLs.
 - **`auth/callback/route.ts`** — Handles magic link redirect, exchanges code for session, redirects new users to profile onboarding.
 - **`supabase/client.ts`** — Browser Supabase client + `getSiteUrl()` helper for auth redirects (priority: NEXT_PUBLIC_SITE_URL > VERCEL_URL > window.location.origin).
-- **`demo-headers.ts`** — Adds X-Demo-Mode header when user is not authenticated.
+- **`demo-headers.ts`** — Adds X-Demo-Mode header when user is not authenticated (dev mode auth bypass).
 
 ### Services (`src/lib/services/`)
 - **`run-persistence.ts`** — CRUD for runs table (createRunRecord, completeRunRecord, updateRunAiSummary).
@@ -116,7 +116,6 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **`pace.ts`** — 30-second rolling window for current pace
 - **`storage.ts`** — IndexedDB backup every 10s
 - **`wake-lock.ts`** — Prevents screen sleep
-- **`demo-data.ts`** — Golden Gate Park 5K loop (350 points)
 
 ### Pages (`src/app/`)
 - **`/`** — Home. Auth-aware: shows profile link or login button.
@@ -151,7 +150,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **Streaming responses**: `/api/coach` and `/api/tts` both stream. Don't buffer full responses.
 
 ### Testing
-- **275 tests** across 26 test files. All must pass before pushing.
+- **266 tests** across 25 test files. All must pass before pushing.
 - **Ask before deleting any tests.** User's explicit standing instruction.
 - Run: `npx vitest run`
 - Build: `npx next build`
@@ -205,11 +204,9 @@ See `docs/AGENTS.md` for full architecture details.
 - **Global agents need scheduler**: Race Director and Story Library Edge Functions need an external cron scheduler (pg_cron or Vercel cron). Not auto-scheduled yet.
 - **Opus 4.6 cost**: Head Coach + Story Curator + Quality Supervisor use Opus 4.6. Estimated ~$0.17 per 30-min run. Monitor usage.
 
-## Dev / Demo Modes
+## Dev Mode
 
-- **Dev mode**: `/dev` → enter password `claude` → `/run?dev=true`. Runs SF Marathon 2026 route simulation at configurable speed (10x-50x). Full coaching pipeline active.
-- **Demo mode**: `/run?demo=true`. Replays Golden Gate Park 5K at 10x speed. Good for quick tests.
-- Both modes generate 200+ synthetic runners for collective presence.
+- **Dev mode**: `/dev` → enter password `claude` → `/run?dev=true`. Runs SF Marathon 2026 route simulation at configurable speed (10x-50x). Full coaching pipeline active. Generates 200+ synthetic runners for collective presence.
 
 ## Environment Variables
 
@@ -253,7 +250,7 @@ OPENWEATHER_API_KEY        — Weather data (unused currently)
 Every feature implementation must complete ALL of the following before being considered done:
 
 ### Code Quality
-1. **All existing tests pass** — Run `npx vitest run` (currently 275 tests across 26 files)
+1. **All existing tests pass** — Run `npx vitest run` (currently 266 tests across 25 files)
 2. **Clean build** — Run `npx next build` with zero errors and zero warnings
 3. **No regressions** — Verify the change doesn't break existing functionality
 4. **Ask before deleting tests** — User's explicit standing instruction

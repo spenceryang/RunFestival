@@ -2,29 +2,18 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Users, Zap, Monitor, User, LogIn, LogOut, ChevronDown } from 'lucide-react';
+import { Play, Users, Zap, User, LogIn, LogOut, ChevronDown } from 'lucide-react';
 import { useCollectiveStore } from '@/lib/store/collective-store';
-import { useRunStore } from '@/lib/store/run-store';
 import { useUserStore } from '@/lib/store/user-store';
 
 export default function HomePage() {
   const router = useRouter();
   const runnerCount = useCollectiveStore((s) => s.runnerCount);
-  const startRun = useRunStore((s) => s.startRun);
   const user = useUserStore((s) => s.user);
   const isAuthenticated = useUserStore((s) => s.isAuthenticated);
   const signOut = useUserStore((s) => s.signOut);
 
   const [showUserMenu, setShowUserMenu] = useState(false);
-
-  const handleDemo = () => {
-    startRun({
-      targetDistanceMeters: 5000,
-      targetPaceSecondsPerKm: 300,
-      persona: 'hype',
-    });
-    router.push('/run?demo=true');
-  };
 
   const handleSignOut = async () => {
     setShowUserMenu(false);
@@ -147,14 +136,6 @@ export default function HomePage() {
             Community Timeline
           </button>
 
-          <button
-            onClick={handleDemo}
-            className="flex items-center gap-2 text-sm text-festival-muted
-                       hover:text-festival-orange transition-colors"
-          >
-            <Monitor className="w-4 h-4" />
-            Demo Mode (simulated run at 10x)
-          </button>
         </div>
       </div>
 

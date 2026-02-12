@@ -177,6 +177,7 @@ export function RunScreen({ onFinish, onTalkToCoach, isListening = false, isCoac
 
     // Persist run to Supabase if we have a run ID (authenticated user)
     const state = useRunStore.getState();
+    console.warn('[RunScreen] handleStop — runId:', state.runId, 'distance:', state.distanceMeters);
     if (state.runId) {
       const runData = {
         runId: state.runId,
