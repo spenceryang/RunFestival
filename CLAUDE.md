@@ -103,7 +103,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **`context-builder.ts`** — Assembles CoachingContext from run state + collective + coaching history
 - **`coach-client.ts`** — Streams Claude response, splits into sentences at `.!?` boundaries
 - **`prompts.ts`** — System prompts for 4 personas + 6 trigger prompts + voice configs
-- **`audio-manager.ts`** — Playback queue (max 2), interrupt/pause/resume support, sentence-level TTS streaming. Four-layer fallback: Web Audio API → HTML `<audio>` element → SpeechSynthesis → silence.
+- **`audio-manager.ts`** — Playback queue (max 2), interrupt/pause/resume support, sentence-level TTS streaming. Persistent HTMLAudioElement on iOS (avoids audio session conflicts). Duration-based + timeupdate watchdog completion signals. Four-layer fallback: Web Audio API → HTML `<audio>` element → SpeechSynthesis → silence.
 - **`tts-client.ts`** — Calls `/api/tts`, returns ArrayBuffer per sentence
 - **`fallback-tts.ts`** — Browser SpeechSynthesis when ElevenLabs fails. Async voice loading for iOS.
 - **`voice-input.ts`** — Web Speech API wrapper for runner voice commands. `onError` callback with typed error ('not-allowed', 'no-speech', etc.) for caller feedback.
@@ -150,7 +150,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **Streaming responses**: `/api/coach` and `/api/tts` both stream. Don't buffer full responses.
 
 ### Testing
-- **266 tests** across 25 test files. All must pass before pushing.
+- **279 tests** across 26 test files. All must pass before pushing.
 - **Ask before deleting any tests.** User's explicit standing instruction.
 - Run: `npx vitest run`
 - Build: `npx next build`
@@ -244,6 +244,8 @@ OPENWEATHER_API_KEY        — Weather data (unused currently)
 9. **Active runners not visible cross-device**: The `active_runners` DB table existed in the schema (with heartbeat cleanup, RLS policies, Realtime publication) but was never written to. All presence tracking relied on ephemeral Supabase Realtime channels — only worked between devices simultaneously subscribed to the same channel. Fixed by: (a) creating `active-runners.ts` service that INSERTs on run start, UPDATEs heartbeat every 30s, DELETEs on run end, (b) adding `/api/active-runners` endpoint that queries count of active runners (heartbeat within 5 min), (c) integrating join/heartbeat/leave lifecycle into `RunScreen.tsx`, (d) community page polls `/api/active-runners` every 30s for cross-device visibility.
 
 10. **Mic button didn't capture voice**: Web Speech API errors were silently swallowed — `onerror` handler didn't log the actual error type (`event.error` can be 'not-allowed', 'no-speech', 'aborted', etc.) and provided no feedback to the caller. On iOS, microphone permission failures appeared as "nothing happened" with no indication of why. Fixed by: (a) adding typed `onError` callback to `VoiceInput.start()`, (b) logging actual error type in `onerror` handler, (c) in `run/page.tsx`, passing error callback that automatically falls through to `sendToCoach()` when mic fails — runner still gets coach interaction even without voice.
+
+11. **iOS audio stopped after first sentence** (v3): Coach said "hey" then went silent — first sentence played but subsequent sentences never started. Root cause: `playWithHtmlAudio()` created a new `HTMLAudioElement` per sentence, and iOS WebKit's `onended` event is unreliable for short audio clips (<2s). The Promise never resolved, blocking the `processQueue` while loop. Fixed by: (a) reusing a persistent `HTMLAudioElement` on iOS instead of creating new ones per sentence (avoids audio session conflicts), (b) replacing the 30s safety timeout with a duration-based timeout (`audio.duration * 1000 + 500ms`), (c) adding a `timeupdate` watchdog that detects stalled playback within 2s, (d) adding `playsInline`/`webkit-playsinline` hints on all Audio elements, (e) adding `touchstart` warm-up alongside `pointerdown` for iOS gesture detection, (f) interrupting coach playback before mic capture to prevent iOS audio session conflicts, (g) adding duplicate callback guard in `VoiceInput` for iOS WebKit's onerror+onend double-fire quirk.
 
 ## Definition of Done (Engineering Standards)
 

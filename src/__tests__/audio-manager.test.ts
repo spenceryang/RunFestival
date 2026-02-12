@@ -320,4 +320,43 @@ describe('AudioManager', () => {
       expect(getPrivateField<unknown[]>(manager, 'queue').length).toBe(0);
     });
   });
+
+  describe('persistent audio element (iOS)', () => {
+    it('getOrCreatePersistentAudio creates element with playsInline hints', () => {
+      // Access private method via type casting
+      const audio = (manager as unknown as { getOrCreatePersistentAudio: () => HTMLAudioElement }).getOrCreatePersistentAudio();
+      expect(audio).toBeInstanceOf(HTMLAudioElement);
+      expect(audio.volume).toBe(0.85);
+      expect(audio.getAttribute('playsinline')).toBe('');
+      expect(audio.getAttribute('webkit-playsinline')).toBe('');
+      expect(audio.preload).toBe('auto');
+    });
+
+    it('getOrCreatePersistentAudio returns the same element on subsequent calls', () => {
+      const getter = (manager as unknown as { getOrCreatePersistentAudio: () => HTMLAudioElement }).getOrCreatePersistentAudio.bind(manager);
+      const audio1 = getter();
+      const audio2 = getter();
+      expect(audio1).toBe(audio2);
+    });
+
+    it('destroy() cleans up persistent audio element', () => {
+      // Create the persistent element first
+      (manager as unknown as { getOrCreatePersistentAudio: () => HTMLAudioElement }).getOrCreatePersistentAudio();
+      expect(getPrivateField(manager, 'persistentAudio')).not.toBeNull();
+
+      manager.destroy();
+      expect(getPrivateField(manager, 'persistentAudio')).toBeNull();
+    });
+
+    it('interrupt() pauses but does not destroy persistent audio', () => {
+      const audio = (manager as unknown as { getOrCreatePersistentAudio: () => HTMLAudioElement }).getOrCreatePersistentAudio();
+      const pauseSpy = vi.spyOn(audio, 'pause');
+
+      manager.interrupt();
+
+      expect(pauseSpy).toHaveBeenCalled();
+      // Persistent audio is kept alive — not set to null
+      expect(getPrivateField(manager, 'persistentAudio')).toBe(audio);
+    });
+  });
 });

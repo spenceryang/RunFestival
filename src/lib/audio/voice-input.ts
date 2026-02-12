@@ -32,14 +32,22 @@ export class VoiceInput {
     this.recognition.lang = 'en-US';
     this.recognition.maxAlternatives = 1;
 
+    // Guard against iOS WebKit firing both onerror AND onend for a single
+    // failed recognition attempt. First callback to fire wins.
+    let completed = false;
+
     this.recognition.onresult = (event: SpeechRecognitionEvent) => {
       const transcript = event.results[0]?.[0]?.transcript ?? '';
       if (transcript.trim()) {
+        completed = true;
+        this._isListening = false;
         onResult(transcript.trim());
       }
     };
 
     this.recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      if (completed) return;
+      completed = true;
       const errorType = event.error || 'unknown';
       console.warn('[VoiceInput] SpeechRecognition error:', errorType, event.message);
       this._isListening = false;
@@ -48,6 +56,8 @@ export class VoiceInput {
     };
 
     this.recognition.onend = () => {
+      if (completed) return;
+      completed = true;
       this._isListening = false;
       onEnd();
     };

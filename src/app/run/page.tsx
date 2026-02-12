@@ -175,6 +175,9 @@ function RunPage() {
       }
     };
     document.addEventListener('pointerdown', warmUpOnGesture);
+    // Belt-and-suspenders: iOS WebKit may not always count pointerdown
+    // as a user gesture for AudioContext unlock, so also listen for touchstart.
+    document.addEventListener('touchstart', warmUpOnGesture);
 
     // Evaluate triggers every 3 seconds
     triggerIntervalRef.current = setInterval(() => {
@@ -244,6 +247,7 @@ function RunPage() {
 
     return () => {
       document.removeEventListener('pointerdown', warmUpOnGesture);
+      document.removeEventListener('touchstart', warmUpOnGesture);
       if (triggerIntervalRef.current) clearInterval(triggerIntervalRef.current);
       triggerEngineRef.current?.reset();
       audioManagerRef.current?.destroy();
@@ -328,6 +332,11 @@ function RunPage() {
       return;
     }
 
+    // Interrupt any active coach playback before starting mic capture.
+    // iOS has a single shared audio session — simultaneous output + input
+    // can cause one or both to fail silently.
+    audioManagerRef.current?.interrupt();
+
     // Try voice input first; fall back to regular coach trigger if unsupported
     if (VoiceInput.isSupported()) {
       const started = voiceInputRef.current?.start(
@@ -339,11 +348,15 @@ function RunPage() {
           setIsListening(false);
         },
         (error) => {
-          // Voice input failed — log and fall through to sendToCoach
           console.warn('[RunPage] Voice input error:', error);
           setIsListening(false);
-          // Automatically ask coach without voice when mic fails
-          sendToCoach();
+          // Only auto-trigger coach for errors where mic can't work at all.
+          // For permission/no-speech errors, don't send a coach message —
+          // it feels like "mic ignored me" when the coach responds without
+          // the user's voice input.
+          if (error === 'not-supported' || error === 'start-failed') {
+            sendToCoach();
+          }
         }
       );
 

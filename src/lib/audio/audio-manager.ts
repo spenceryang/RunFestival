@@ -21,6 +21,8 @@ export class AudioManager {
   private isMuted = false;
   private currentSource: AudioBufferSourceNode | null = null;
   private currentHtmlAudio: HTMLAudioElement | null = null;
+  private persistentAudio: HTMLAudioElement | null = null;
+  private currentBlobUrl: string | null = null;
   private interrupted = false;
   private isPaused = false;
   private visibilityHandler: (() => void) | null = null;
@@ -38,6 +40,25 @@ export class AudioManager {
       };
       document.addEventListener('visibilitychange', this.visibilityHandler);
     }
+  }
+
+  /**
+   * Get or create the persistent HTMLAudioElement used for iOS playback.
+   * Reusing a single element avoids iOS WebKit issues where creating
+   * multiple Audio() elements causes audio session conflicts.
+   */
+  private getOrCreatePersistentAudio(): HTMLAudioElement {
+    if (!this.persistentAudio) {
+      this.persistentAudio = new Audio();
+      this.persistentAudio.volume = 0.85;
+      // iOS inline playback hints — prevent fullscreen and ensure
+      // audio plays without requiring user interaction on each clip.
+      (this.persistentAudio as HTMLAudioElement & { playsInline: boolean }).playsInline = true;
+      this.persistentAudio.setAttribute('playsinline', '');
+      this.persistentAudio.setAttribute('webkit-playsinline', '');
+      this.persistentAudio.preload = 'auto';
+    }
+    return this.persistentAudio;
   }
 
   private async getAudioContext(): Promise<AudioContext> {
@@ -85,7 +106,7 @@ export class AudioManager {
       this.currentSource = null;
     }
 
-    // Stop current HTML Audio playback
+    // Stop current HTML Audio playback (legacy non-persistent path)
     if (this.currentHtmlAudio) {
       try {
         this.currentHtmlAudio.pause();
@@ -94,6 +115,19 @@ export class AudioManager {
         // Already stopped
       }
       this.currentHtmlAudio = null;
+    }
+
+    // Stop persistent iOS audio element (pause but don't destroy — reuse)
+    if (this.persistentAudio) {
+      try {
+        this.persistentAudio.pause();
+      } catch {
+        // Already stopped
+      }
+    }
+    if (this.currentBlobUrl) {
+      URL.revokeObjectURL(this.currentBlobUrl);
+      this.currentBlobUrl = null;
     }
 
     // Cancel any browser TTS in progress
@@ -122,7 +156,7 @@ export class AudioManager {
       this.currentSource = null;
     }
 
-    // Stop current HTML Audio playback
+    // Stop current HTML Audio playback (legacy non-persistent path)
     if (this.currentHtmlAudio) {
       try {
         this.currentHtmlAudio.pause();
@@ -131,6 +165,19 @@ export class AudioManager {
         // Already stopped
       }
       this.currentHtmlAudio = null;
+    }
+
+    // Stop persistent iOS audio element (pause but don't destroy — reuse)
+    if (this.persistentAudio) {
+      try {
+        this.persistentAudio.pause();
+      } catch {
+        // Already stopped
+      }
+    }
+    if (this.currentBlobUrl) {
+      URL.revokeObjectURL(this.currentBlobUrl);
+      this.currentBlobUrl = null;
     }
 
     // Cancel any browser TTS in progress
@@ -317,62 +364,142 @@ export class AudioManager {
 
   /**
    * Play an MP3 ArrayBuffer using an HTML Audio element.
-   * This bypasses Web Audio API's decodeAudioData entirely,
-   * which is more reliable on iOS where AudioContext may be suspended.
+   * On iOS, reuses a persistent element to avoid audio session conflicts.
+   * Non-iOS creates a fresh element per call for clean lifecycle.
+   *
+   * Uses three completion signals (first one wins):
+   * 1. onended — normal completion (unreliable on iOS for short clips)
+   * 2. Duration-based timeout — fires at (duration * 1000) + 500ms
+   * 3. timeupdate watchdog — detects stalled playback within 2s
    */
   private playWithHtmlAudio(buffer: ArrayBuffer): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        if (settled) return;
+        settled = true;
+      };
+
       try {
         const blob = new Blob([buffer], { type: 'audio/mpeg' });
         const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio.volume = 0.85;
+
+        // Revoke previous blob URL if any
+        if (this.currentBlobUrl) {
+          URL.revokeObjectURL(this.currentBlobUrl);
+        }
+        this.currentBlobUrl = url;
+
+        // iOS: reuse persistent element; non-iOS: create fresh element
+        const usesPersistent = isIOS();
+        const audio = usesPersistent
+          ? this.getOrCreatePersistentAudio()
+          : new Audio(url);
+
+        if (usesPersistent) {
+          audio.src = url;
+        } else {
+          audio.volume = 0.85;
+          // Inline playback hints for all platforms
+          (audio as HTMLAudioElement & { playsInline: boolean }).playsInline = true;
+          audio.setAttribute('playsinline', '');
+          audio.setAttribute('webkit-playsinline', '');
+          audio.preload = 'auto';
+        }
 
         this.currentHtmlAudio = audio;
 
-        // Safety timeout — if audio doesn't end within 30s, resolve anyway
-        const safetyTimeout = setTimeout(() => {
-          console.warn('[AudioManager] HTML Audio safety timeout — resolving');
-          URL.revokeObjectURL(url);
-          if (this.currentHtmlAudio === audio) {
-            this.currentHtmlAudio = null;
-          }
-          resolve();
-        }, 30_000);
+        let durationTimeout: ReturnType<typeof setTimeout> | null = null;
+        let watchdogInterval: ReturnType<typeof setInterval> | null = null;
+        let safetyTimeout: ReturnType<typeof setTimeout> | null = null;
+        let lastTimeUpdate = 0;
 
-        audio.onended = () => {
-          clearTimeout(safetyTimeout);
-          URL.revokeObjectURL(url);
-          if (this.currentHtmlAudio === audio) {
-            this.currentHtmlAudio = null;
+        const clearAllTimers = () => {
+          if (durationTimeout) { clearTimeout(durationTimeout); durationTimeout = null; }
+          if (watchdogInterval) { clearInterval(watchdogInterval); watchdogInterval = null; }
+          if (safetyTimeout) { clearTimeout(safetyTimeout); safetyTimeout = null; }
+        };
+
+        const finish = (reason: string) => {
+          if (settled) return;
+          cleanup();
+          clearAllTimers();
+          audio.onended = null;
+          audio.onerror = null;
+          audio.ontimeupdate = null;
+          // Only revoke URL for non-persistent elements; persistent ones
+          // reuse the element and blob URL is revoked on next play or destroy
+          if (!usesPersistent) {
+            URL.revokeObjectURL(url);
+            if (this.currentHtmlAudio === audio) {
+              this.currentHtmlAudio = null;
+            }
           }
+          console.warn('[AudioManager] HTML Audio finished —', reason);
           resolve();
         };
 
-        audio.onerror = () => {
-          clearTimeout(safetyTimeout);
-          URL.revokeObjectURL(url);
-          if (this.currentHtmlAudio === audio) {
-            this.currentHtmlAudio = null;
+        const fail = (reason: string, error?: unknown) => {
+          if (settled) return;
+          cleanup();
+          clearAllTimers();
+          audio.onended = null;
+          audio.onerror = null;
+          audio.ontimeupdate = null;
+          if (!usesPersistent) {
+            URL.revokeObjectURL(url);
+            if (this.currentHtmlAudio === audio) {
+              this.currentHtmlAudio = null;
+            }
           }
-          console.warn('[AudioManager] HTML Audio playback error');
-          reject(new Error('HTML Audio playback failed'));
+          console.warn('[AudioManager] HTML Audio failed —', reason, error);
+          reject(new Error(reason));
+        };
+
+        // Ultimate safety timeout — 15s max per sentence (down from 30s)
+        safetyTimeout = setTimeout(() => finish('safety timeout (15s)'), 15_000);
+
+        // Signal 1: onended — the normal completion path
+        audio.onended = () => finish('onended');
+
+        audio.onerror = () => fail('playback error');
+
+        // Signal 3: timeupdate watchdog — detect stalled playback
+        audio.ontimeupdate = () => {
+          lastTimeUpdate = Date.now();
         };
 
         console.warn('[AudioManager] HTML Audio play() called, buffer:', buffer.byteLength, 'bytes');
         audio.play().then(() => {
-          console.warn('[AudioManager] HTML Audio play() resolved, duration:', audio.duration);
-        }).catch((e) => {
-          clearTimeout(safetyTimeout);
-          URL.revokeObjectURL(url);
-          if (this.currentHtmlAudio === audio) {
-            this.currentHtmlAudio = null;
+          const dur = audio.duration;
+          console.warn('[AudioManager] HTML Audio play() resolved, duration:', dur);
+
+          // Signal 2: Duration-based timeout — tighter than the safety timeout
+          if (Number.isFinite(dur) && dur > 0) {
+            durationTimeout = setTimeout(
+              () => finish('duration timeout'),
+              dur * 1000 + 500
+            );
           }
-          console.warn('[AudioManager] HTML Audio play() rejected:', e);
-          reject(e);
+
+          // Start the timeupdate watchdog — if no timeupdate for 2s
+          // while playback should still be going, audio is stalled
+          lastTimeUpdate = Date.now();
+          watchdogInterval = setInterval(() => {
+            if (settled) { clearInterval(watchdogInterval!); return; }
+            const elapsed = Date.now() - lastTimeUpdate;
+            if (elapsed > 2000) {
+              finish('timeupdate watchdog (stalled 2s)');
+            }
+          }, 1000);
+        }).catch((e) => {
+          fail('play() rejected', e);
         });
       } catch (e) {
-        reject(e);
+        if (!settled) {
+          cleanup();
+          reject(e);
+        }
       }
     });
   }
@@ -437,6 +564,20 @@ export class AudioManager {
 
   destroy(): void {
     this.interrupt();
+    // Destroy persistent audio element
+    if (this.persistentAudio) {
+      try {
+        this.persistentAudio.pause();
+        this.persistentAudio.src = '';
+      } catch {
+        // Already stopped
+      }
+      this.persistentAudio = null;
+    }
+    if (this.currentBlobUrl) {
+      URL.revokeObjectURL(this.currentBlobUrl);
+      this.currentBlobUrl = null;
+    }
     destroySharedContext();
     this.audioContext = null;
     if (this.visibilityHandler && typeof document !== 'undefined') {
