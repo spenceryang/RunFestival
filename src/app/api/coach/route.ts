@@ -60,7 +60,11 @@ ${context.paceAnalysis.projectedFinishSeconds ? `- Projected finish: ${formatTim
   const motivationSection = context.motivationState
     ? `\nENERGY STATE (from Motivation Engine):
 - Energy level: ${context.motivationState.energyLevel}
-- Approach: ${context.motivationState.approach}`
+- Run phase: ${context.motivationState.runPhase}
+- Mindset mode: ${context.motivationState.mindsetMode} (${context.motivationState.mindsetMode === 'how' ? 'focus on mechanics, breathing, sub-goals' : 'reflect on purpose, meaning, community'})
+- Momentum: ${context.motivationState.momentum}
+- Approach: ${context.motivationState.approach}
+- Self-talk cue: "${context.motivationState.selfTalkCue}"`
     : '';
 
   const storySection = context.storyPlan

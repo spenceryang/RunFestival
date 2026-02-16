@@ -21,15 +21,15 @@ Think Peloton energy, but for the open road.
 ### Multi-Agent AI Coaching
 - **Head Coach (Opus 4.6)** — 4 coaching personas with distinct voices and personalities
 - **Pace Strategist** — Rule-based split analysis, finish projection, pacing strategy classification
-- **Motivation Engine** — Detects struggle vs flow state, adapts coaching energy
+- **Motivation Engine** — Research-backed: 6 run phases, "how" vs "why" mindset modes, momentum detection, self-talk cues, experience-adaptive coaching
 - **Story Curator** — Async story planning for idle storytelling triggers
 - **Quality Supervisor** — Reviews every 3rd coaching message, improves future prompts
-- Sentence-level streaming for <5s latency (Claude API to ElevenLabs TTS to Web Audio)
+- Sentence-level streaming for <5s latency (Claude API to OpenAI TTS to Web Audio)
 - Mid-run voice input via Web Speech API
 
 ### Cost Guards & Monitoring
 - **TTS Usage Tracker** — Session character limits, rate limiting, per-request size caps
-- **Background detection** — Pauses ElevenLabs API calls when app is backgrounded
+- **Background detection** — Pauses OpenAI TTS API calls when app is backgrounded
 - **Server-side guards** — Text length validation on the TTS API route
 - **Dev mode analytics panel** — Real-time cost tracking (characters, requests, estimated $)
 
@@ -70,7 +70,7 @@ Think Peloton energy, but for the open road.
 ### Dev / Demo Mode
 - Demo mode: simulated 5K at 10x speed (works without login)
 - Dev mode: password-protected SF Marathon 2026 route simulation with adjustable speed
-- API usage analytics panel (ElevenLabs characters, cost, request rate)
+- API usage analytics panel (OpenAI TTS characters, cost, request rate)
 
 ## Coaching Personas
 
@@ -90,7 +90,7 @@ Think Peloton energy, but for the open road.
 | State | Zustand (5 stores: run, coaching, collective, timeline, user) |
 | Backend | Supabase (Auth, PostgreSQL, Realtime, Edge Functions) |
 | AI | Claude API (Opus 4.6, streaming) |
-| TTS | ElevenLabs (Turbo v2.5, streaming) with cost guards |
+| TTS | OpenAI TTS (`tts-1`) with cost guards |
 | Voice Input | Web Speech API |
 | Maps | Mapbox GL JS |
 | Deploy | Vercel (Edge Functions) |
@@ -123,7 +123,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase publishable key | Yes |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Yes |
 | `ANTHROPIC_API_KEY` | Claude API key for AI coaching | Yes |
-| `ELEVENLABS_API_KEY` | ElevenLabs API key for voice | Yes |
+| `OPENAI_API_KEY` | OpenAI API key for TTS voice | Yes |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | Mapbox public token for maps | Yes |
 | `NEXT_PUBLIC_SITE_URL` | Production URL for auth redirects (e.g. `https://runfestival.vercel.app`) | Yes (prod) |
 | `OPENWEATHER_API_KEY` | OpenWeather API key | Optional |
@@ -134,7 +134,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 npm run dev          # Development server
 npm run build        # Production build
 npm run start        # Production server
-npm run test         # Run all tests (247 tests)
+npm run test         # Run all tests (324 tests)
 npm run test:watch   # Watch mode
 ```
 
@@ -144,7 +144,7 @@ npm run test:watch   # Watch mode
 src/
   app/
     api/coach/       # Claude streaming proxy (Edge Runtime)
-    api/tts/         # ElevenLabs streaming proxy with cost guard (Edge Runtime)
+    api/tts/         # OpenAI TTS proxy with cost guard (Edge Runtime)
     api/recap/       # AI run recap generation (Edge Runtime)
     api/story-plan/  # Story Curator async planning (Edge Runtime)
     api/quality/     # Quality Supervisor review (Edge Runtime)
@@ -189,7 +189,7 @@ supabase/
    - Trigger engine evaluates every 3s -> Pace Strategist and Motivation Engine enrich context -> Head Coach (Opus 4.6) generates response -> TTS -> Audio playback
    - Story Curator pre-generates story plans (async) for idle triggers
    - Quality Supervisor reviews every 3rd message (async) and feeds improvements back
-   - TTS Usage Tracker monitors ElevenLabs consumption with cost guards
+   - TTS Usage Tracker monitors OpenAI TTS consumption with cost guards
 5. **Community** — City-sharded presence channels; Race Director generates cross-runner moments
 6. **Recap** — AI narrative, pace heatmap, splits — all persisted to your profile
 7. **Offline** — If Supabase is unreachable, run data is queued and synced on next login
@@ -206,6 +206,18 @@ Or use the Supabase CLI:
 ```bash
 npx supabase db push
 ```
+
+## Research
+
+The Motivation Engine is informed by peer-reviewed sports psychology research:
+
+1. **Masters, K. S., Ogles, B. M., & Jolton, J. A. (1993).** "The Development of an Instrument to Measure Motivation for Marathon Running: The Motivations of Marathoners Scales (MOMS)." *Research Quarterly for Exercise and Sport, 64*(2), 134-143. — 11 motivational dimensions; novice vs experienced runner differences.
+
+2. **Touré-Tillery, M. & Fishbach, A. (2025).** "What Motivates Runners: Focusing on the 'How' Rather Than the 'Why'." *Motivation Science.* — When struggling, implemental "how" mindsets (focus on breathing, form, sub-goals) outperform abstract "why" motivation. The core finding behind the engine's mindset mode selection.
+
+3. **Blanchfield, A. W., Hardy, J., De Morree, H. M., Staiano, W., & Marcora, S. M. (2014).** "Talking Yourself Out of Exhaustion: The Effects of Self-Talk on Endurance Performance." *Medicine & Science in Sports & Exercise, 46*(5), 998-1007. — Motivational self-talk significantly increases perceived effort value and fun/interest during endurance tasks.
+
+4. **Nikolaidis, P. T., Chalabaev, A., Rosemann, T., & Knechtle, B. (2019).** "Motivation in the Athens Classic Marathon." *International Journal of Environmental Research and Public Health, 16*(11). — Health, fitness, and social factors drive marathon runners; experience level shifts motivational profiles over time.
 
 ## Documentation
 

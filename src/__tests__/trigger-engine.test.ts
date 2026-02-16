@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CoachingTriggerEngine } from '@/lib/coach/trigger-engine';
 
 function makeSnapshot(overrides = {}) {
@@ -25,6 +25,10 @@ describe('CoachingTriggerEngine', () => {
   beforeEach(() => {
     engine = new CoachingTriggerEngine();
     vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('returns null when status is not running', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 
 // We need to test getSiteUrl with different env var combinations.
 // Since getSiteUrl reads process.env at call time, we can modify them between tests.

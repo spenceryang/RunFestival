@@ -54,6 +54,10 @@ export interface CoachingContext {
     approach: string;
     shouldBoost: boolean;
     recentPaceTrend: number;
+    runPhase: string;
+    mindsetMode: string;
+    momentum: string;
+    selfTalkCue: string;
   };
   storyPlan?: {
     title: string;

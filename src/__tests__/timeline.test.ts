@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { generateTimelineRuns, formatTimeAgo } from '@/lib/collective/timeline';
 import { useTimelineStore } from '@/lib/store/timeline-store';
 
@@ -56,6 +56,10 @@ describe('formatTimeAgo', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000_000);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('returns "just now" for < 60 seconds', () => {

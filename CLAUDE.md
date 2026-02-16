@@ -77,7 +77,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 
 ### Specialist Agents (`src/lib/agents/`)
 - **`pace-strategist.ts`** — Rule-based. Analyzes splits, projects finish time, classifies pacing strategy. Zero API cost.
-- **`motivation-engine.ts`** — Rule-based. Detects struggle vs flow state from pace trends. Zero API cost.
+- **`motivation-engine.ts`** — Rule-based. Research-backed motivation engine with 6 run phases, "how" vs "why" mindset selection, momentum detection, self-talk cues, and experience-adaptive coaching. Zero API cost.
 - **`story-curator.ts`** — Generates story plans via Opus 4.6. Called async on first idle trigger. Cached for subsequent triggers.
 - **`quality-supervisor.ts`** — Reviews every 3rd coaching message via Opus 4.6. Non-blocking.
 
@@ -150,7 +150,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 - **Streaming responses**: `/api/coach` and `/api/tts` both stream. Don't buffer full responses.
 
 ### Testing
-- **279 tests** across 26 test files. All must pass before pushing.
+- **324 tests** across 27 test files. All must pass before pushing.
 - **Ask before deleting any tests.** User's explicit standing instruction.
 - Run: `npx vitest run`
 - Build: `npx next build`
@@ -180,7 +180,7 @@ GPS Tracker ──► RunStore ──► Trigger Engine (every 3s)
 Each run session has a **per-user agent team**:
 - **Head Coach (Opus 4.6)** — owns the voice, makes final creative decisions
 - **Pace Strategist (rule-based)** — analyzes splits, projects finish, classifies strategy
-- **Motivation Engine (rule-based)** — detects struggle/flow, picks energy approach
+- **Motivation Engine (rule-based)** — research-backed: 6 run phases, "how" vs "why" mindset modes, momentum detection, self-talk cues, experience-adaptive coaching
 - **Story Curator (Opus 4.6, async)** — pre-generates story plans for idle triggers
 - **Quality Supervisor (Opus 4.6, async)** — reviews every 3rd message, stores feedback
 

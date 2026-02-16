@@ -64,7 +64,8 @@ export function buildCoachingContext(
     runState.targetPaceSecondsPerKm,
     runState.elapsedSeconds,
     runState.targetDistanceMeters,
-    runState.distanceMeters
+    runState.distanceMeters,
+    profile.experienceLevel
   );
 
   const context: CoachingContext = {
